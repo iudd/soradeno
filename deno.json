@@ -1,0 +1,14 @@
+{
+  "name": "soradeno",
+  "version": "1.0.0",
+  "description": "OpenAI-compatible text-to-video API service deployed on Deno",
+  "main": "server.ts",
+  "scripts": {
+    "dev": "deno run --allow-net --allow-env server.ts",
+    "deploy": "deployctl deploy --project=soradeno server.ts"
+  },
+  "imports": {
+    "oak": "https://deno.land/x/oak@v12.6.1/mod.ts",
+    "cors": "https://deno.land/x/cors@v1.2.2/mod.ts"
+  }
+}

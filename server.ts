@@ -57,18 +57,9 @@ async function handler(req: Request): Promise<Response> {
       });
     }
 
-    // Image generations endpoint (for Sora-like video generation)
+    // Images generations endpoint
     if (url.pathname === "/v1/images/generations" && req.method === "POST") {
       const body = await req.json();
-
-      // For Sora-like functionality, you might need to use DALL-E or other image APIs
-      // Since Sora API is not publicly available, using DALL-E as fallback
-      const imageBody = {
-        prompt: body.prompt || "A beautiful landscape",
-        n: body.n || 1,
-        size: body.size || "1024x1024",
-        model: "dall-e-3",
-      };
 
       const response = await fetch(`${API_BASE_URL}/images/generations`, {
         method: "POST",
@@ -76,7 +67,7 @@ async function handler(req: Request): Promise<Response> {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${API_KEY}`,
         },
-        body: JSON.stringify(imageBody),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
@@ -92,28 +83,7 @@ async function handler(req: Request): Promise<Response> {
       }
 
       const data = await response.json();
-
-      // Transform response to include video-like metadata if needed
-      const transformedData = {
-        ...data,
-        note: "Using DALL-E as Sora API is not publicly available",
-      };
-
-      return new Response(JSON.stringify(transformedData), {
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Content-Type": "application/json",
-        },
-      });
-    }
-
-    // Health check endpoint
-    if (url.pathname === "/health" && req.method === "GET") {
-      return new Response(JSON.stringify({
-        status: "ok",
-        timestamp: new Date().toISOString(),
-        api_base_url: API_BASE_URL,
-      }), {
+      return new Response(JSON.stringify(data), {
         headers: {
           "Access-Control-Allow-Origin": "*",
           "Content-Type": "application/json",

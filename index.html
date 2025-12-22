@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -60,8 +61,15 @@
         }
 
         @keyframes gradient {
-            0%, 100% { filter: hue-rotate(0deg); }
-            50% { filter: hue-rotate(20deg); }
+
+            0%,
+            100% {
+                filter: hue-rotate(0deg);
+            }
+
+            50% {
+                filter: hue-rotate(20deg);
+            }
         }
 
         .subtitle {
@@ -117,8 +125,15 @@
         }
 
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         /* Card */
@@ -278,8 +293,13 @@
         }
 
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
         }
 
         /* Result Display */
@@ -341,8 +361,15 @@
         }
 
         @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
         }
 
         /* Grid Layout */
@@ -475,6 +502,7 @@
                 transform: translateX(400px);
                 opacity: 0;
             }
+
             to {
                 transform: translateX(0);
                 opacity: 1;
@@ -522,6 +550,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <header>
@@ -531,7 +560,8 @@
 
         <!-- Status Bar -->
         <div class="card">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+            <div
+                style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
                 <div>
                     <span class="status-badge" id="apiStatus">
                         <span class="status-dot"></span>
@@ -561,7 +591,7 @@
         <div id="video-tab" class="tab-content active">
             <div class="card">
                 <h2 class="card-title">🎬 视频生成</h2>
-                
+
                 <div class="form-group">
                     <label>选择模型</label>
                     <div class="model-grid" id="videoModels"></div>
@@ -583,7 +613,8 @@
                 <div class="form-group" id="videoImageUpload" style="display: none;">
                     <label>上传参考图片</label>
                     <div class="file-upload">
-                        <input type="file" id="videoImageFile" accept="image/*" onchange="previewFile(this, 'videoImagePreview')">
+                        <input type="file" id="videoImageFile" accept="image/*"
+                            onchange="previewFile(this, 'videoImagePreview')">
                         <label for="videoImageFile" class="file-upload-label">
                             <span>📁 点击上传图片或拖拽到此处</span>
                         </label>
@@ -604,7 +635,7 @@
         <div id="image-tab" class="tab-content">
             <div class="card">
                 <h2 class="card-title">🖼️ 图片生成</h2>
-                
+
                 <div class="form-group">
                     <label>选择模型</label>
                     <div class="model-grid" id="imageModels"></div>
@@ -626,7 +657,8 @@
                 <div class="form-group" id="imageImageUpload" style="display: none;">
                     <label>上传参考图片</label>
                     <div class="file-upload">
-                        <input type="file" id="imageImageFile" accept="image/*" onchange="previewFile(this, 'imageImagePreview')">
+                        <input type="file" id="imageImageFile" accept="image/*"
+                            onchange="previewFile(this, 'imageImagePreview')">
                         <label for="imageImageFile" class="file-upload-label">
                             <span>📁 点击上传图片或拖拽到此处</span>
                         </label>
@@ -652,7 +684,7 @@
                     <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">
                         基于已有视频继续创作
                     </p>
-                    
+
                     <div class="form-group">
                         <label>视频分享链接或 ID</label>
                         <input type="text" id="remixUrl" placeholder="https://sora.chatgpt.com/p/xxx 或直接输入 ID">
@@ -677,10 +709,12 @@
                     <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">
                         创建多段分镜视频
                     </p>
-                    
+
                     <div class="form-group">
                         <label>分镜脚本</label>
-                        <textarea id="storyboardPrompt" placeholder="格式：[时长s]描述&#10;例如：&#10;[5.0s]猫猫从飞机上跳伞&#10;[5.0s]猫猫降落&#10;[10.0s]猫猫在田野奔跑" rows="6"></textarea>
+                        <textarea id="storyboardPrompt"
+                            placeholder="格式：[时长s]描述&#10;例如：&#10;[5.0s]猫猫从飞机上跳伞&#10;[5.0s]猫猫降落&#10;[10.0s]猫猫在田野奔跑"
+                            rows="6"></textarea>
                     </div>
 
                     <button class="btn btn-primary" onclick="generateStoryboard()">
@@ -730,7 +764,7 @@
             try {
                 const response = await fetch(`${API_BASE}/health`);
                 const data = await response.json();
-                
+
                 if (response.ok && data.status === 'ok') {
                     statusEl.innerHTML = '<span class="status-dot"></span><span>在线</span>';
                     statusEl.classList.add('status-online');
@@ -795,7 +829,7 @@
         function switchTab(tabName) {
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-            
+
             event.target.classList.add('active');
             document.getElementById(`${tabName}-tab`).classList.add('active');
         }
@@ -815,7 +849,7 @@
         function previewFile(input, previewId) {
             const preview = document.getElementById(previewId);
             const file = input.files[0];
-            
+
             if (file) {
                 const reader = new FileReader();
                 reader.onload = (e) => {
@@ -860,7 +894,7 @@
 
             try {
                 let messages = [];
-                
+
                 if (mode === 'image') {
                     const fileInput = document.getElementById('videoImageFile');
                     if (!fileInput.files[0]) {
@@ -869,7 +903,7 @@
                         btn.innerHTML = '<span>🎬 生成视频</span>';
                         return;
                     }
-                    
+
                     const base64 = await fileToBase64(fileInput.files[0]);
                     messages = [{
                         role: 'user',
@@ -913,7 +947,7 @@
 
             try {
                 let messages = [];
-                
+
                 if (mode === 'image') {
                     const fileInput = document.getElementById('imageImageFile');
                     if (!fileInput.files[0]) {
@@ -922,7 +956,7 @@
                         btn.innerHTML = '<span>🖼️ 生成图片</span>';
                         return;
                     }
-                    
+
                     const base64 = await fileToBase64(fileInput.files[0]);
                     messages = [{
                         role: 'user',
@@ -949,7 +983,7 @@
         async function generateRemix() {
             const url = document.getElementById('remixUrl').value.trim();
             const prompt = document.getElementById('remixPrompt').value.trim();
-            
+
             if (!url || !prompt) {
                 showToast('请填写视频链接和提示词', 'error');
                 return;
@@ -976,7 +1010,7 @@
         // Generate Storyboard
         async function generateStoryboard() {
             const prompt = document.getElementById('storyboardPrompt').value.trim();
-            
+
             if (!prompt) {
                 showToast('请输入分镜脚本', 'error');
                 return;
@@ -1038,7 +1072,7 @@
                         try {
                             const json = JSON.parse(data);
                             const content = json.choices?.[0]?.delta?.content || '';
-                            
+
                             if (content) {
                                 streamOutput.textContent += content;
                                 streamOutput.scrollTop = streamOutput.scrollHeight;
@@ -1058,10 +1092,10 @@
 
             // Display result
             if (mediaUrl) {
-                const mediaHtml = type === 'video' 
+                const mediaHtml = type === 'video'
                     ? `<video src="${mediaUrl}" controls class="result-media"></video>`
                     : `<img src="${mediaUrl}" alt="Generated" class="result-media">`;
-                
+
                 resultDiv.innerHTML = `
                     <div class="result-item">
                         <div style="margin-bottom: 1rem;">
@@ -1069,10 +1103,13 @@
                             <p style="color: var(--text-secondary); margin-top: 0.5rem;">${prompt}</p>
                         </div>
                         ${mediaHtml}
-                        <div style="margin-top: 1rem;">
-                            <a href="${mediaUrl}" target="_blank" class="btn btn-secondary" style="padding: 0.5rem 1rem;">
+                        <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
+                            <button onclick="downloadMedia('${mediaUrl}', '${type}')" class="btn btn-primary" style="padding: 0.5rem 1rem;">
                                 📥 下载${type === 'video' ? '视频' : '图片'}
-                            </a>
+                            </button>
+                            <button onclick="copyToClipboard('${mediaUrl}')" class="btn btn-secondary" style="padding: 0.5rem 1rem;">
+                                📋 复制链接
+                            </button>
                         </div>
                     </div>
                 `;
@@ -1092,6 +1129,58 @@
             }
         }
 
+        // Download Media Function
+        async function downloadMedia(url, type) {
+            try {
+                showToast('开始下载...', 'success');
+
+                // Fetch the media file
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`下载失败: ${response.status}`);
+                }
+
+                // Get the blob
+                const blob = await response.blob();
+
+                // Create download link
+                const blobUrl = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = blobUrl;
+
+                // Generate filename
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+                const extension = type === 'video' ? 'mp4' : 'png';
+                a.download = `sora-${type}-${timestamp}.${extension}`;
+
+                // Trigger download
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+
+                // Clean up
+                setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+
+                showToast('下载成功!', 'success');
+            } catch (error) {
+                console.error('Download error:', error);
+                showToast('下载失败: ' + error.message, 'error');
+
+                // Fallback: open in new tab
+                window.open(url, '_blank');
+            }
+        }
+
+        // Copy to Clipboard
+        async function copyToClipboard(text) {
+            try {
+                await navigator.clipboard.writeText(text);
+                showToast('链接已复制到剪贴板!', 'success');
+            } catch (error) {
+                showToast('复制失败', 'error');
+            }
+        }
+
         // History Management
         function saveToHistory(item) {
             generationHistory.unshift(item);
@@ -1104,7 +1193,7 @@
 
         function loadHistory() {
             const historyList = document.getElementById('historyList');
-            
+
             if (generationHistory.length === 0) {
                 historyList.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 2rem;">暂无生成记录</p>';
                 return;
@@ -1112,10 +1201,10 @@
 
             historyList.innerHTML = generationHistory.map((item, index) => `
                 <div class="history-item">
-                    ${item.type === 'video' 
-                        ? `<video src="${item.url}" class="history-thumbnail" muted></video>`
-                        : `<img src="${item.url}" class="history-thumbnail" alt="Thumbnail">`
-                    }
+                    ${item.type === 'video'
+                    ? `<video src="${item.url}" class="history-thumbnail" muted></video>`
+                    : `<img src="${item.url}" class="history-thumbnail" alt="Thumbnail">`
+                }
                     <div class="history-content">
                         <div class="history-prompt">${item.prompt}</div>
                         <div class="history-meta">
@@ -1124,12 +1213,15 @@
                             ${new Date(item.timestamp).toLocaleString('zh-CN')}
                         </div>
                     </div>
-                    <div style="display: flex; gap: 0.5rem;">
-                        <a href="${item.url}" target="_blank" class="btn btn-secondary" style="padding: 0.5rem 1rem;">
+                    <div style="display: flex; gap: 0.5rem; flex-direction: column;">
+                        <button onclick="downloadMedia('${item.url}', '${item.type}')" class="btn btn-primary" style="padding: 0.5rem 1rem; white-space: nowrap;">
                             📥 下载
-                        </a>
+                        </button>
+                        <button onclick="copyToClipboard('${item.url}')" class="btn btn-secondary" style="padding: 0.5rem 1rem; white-space: nowrap;">
+                            � 复制
+                        </button>
                         <button class="btn btn-secondary" onclick="deleteHistory(${index})" style="padding: 0.5rem 1rem;">
-                            🗑️
+                            🗑️ 删除
                         </button>
                     </div>
                 </div>
@@ -1168,4 +1260,5 @@
         }
     </script>
 </body>
+
 </html>

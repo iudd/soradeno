@@ -3,14 +3,29 @@ import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 const API_BASE_URL = Deno.env.get("API_BASE_URL") || "https://iyougame-soarmb.hf.space/v1";
 const API_KEY = Deno.env.get("API_KEY") || "han1234";
 
+// Logging helper
+function log(level: string, message: string, data?: any) {
+  const timestamp = new Date().toISOString();
+  const logData = data ? ` | Data: ${JSON.stringify(data)}` : "";
+  console.log(`[${timestamp}] [${level}] ${message}${logData}`);
+}
+
 // Read index.html content
 const indexHtml = await Deno.readTextFile("./index.html");
 
 async function handler(req: Request): Promise<Response> {
   const url = new URL(req.url);
+  const requestId = crypto.randomUUID().slice(0, 8);
+
+  // Log incoming request
+  log("INFO", `[${requestId}] ${req.method} ${url.pathname}`, {
+    origin: req.headers.get("origin"),
+    userAgent: req.headers.get("user-agent")?.slice(0, 50),
+  });
 
   // Handle CORS
   if (req.method === "OPTIONS") {
+    log("INFO", `[${requestId}] CORS preflight request`);
     return new Response(null, {
       headers: {
         "Access-Control-Allow-Origin": "*",
@@ -23,6 +38,7 @@ async function handler(req: Request): Promise<Response> {
   try {
     // Serve index.html for root path
     if (url.pathname === "/" && req.method === "GET") {
+      log("INFO", `[${requestId}] Serving index.html`);
       return new Response(indexHtml, {
         headers: {
           "Content-Type": "text/html; charset=utf-8",
@@ -32,11 +48,14 @@ async function handler(req: Request): Promise<Response> {
 
     // Health check endpoint
     if (url.pathname === "/health" && req.method === "GET") {
-      return new Response(JSON.stringify({
+      const healthData = {
         status: "ok",
         api_base: API_BASE_URL,
+        api_key_configured: !!API_KEY,
         timestamp: new Date().toISOString(),
-      }), {
+      };
+      log("INFO", `[${requestId}] Health check`, healthData);
+      return new Response(JSON.stringify(healthData), {
         headers: {
           "Access-Control-Allow-Origin": "*",
           "Content-Type": "application/json",
@@ -48,13 +67,27 @@ async function handler(req: Request): Promise<Response> {
     if (url.pathname === "/v1/chat/completions" && req.method === "POST") {
       const body = await req.json();
 
+      // Log request details
+      log("INFO", `[${requestId}] Chat completion request`, {
+        model: body.model,
+        messageCount: body.messages?.length,
+        stream: body.stream,
+      });
+
       // Ensure stream is enabled for Sora2mb
       const requestBody = {
         ...body,
         stream: body.stream !== false, // Default to true
       };
 
-      const response = await fetch(`${API_BASE_URL}/chat/completions`, {
+      const backendUrl = `${API_BASE_URL}/chat/completions`;
+      log("INFO", `[${requestId}] Calling backend API`, {
+        url: backendUrl,
+        hasApiKey: !!API_KEY,
+      });
+
+      const startTime = Date.now();
+      const response = await fetch(backendUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -63,9 +96,20 @@ async function handler(req: Request): Promise<Response> {
         body: JSON.stringify(requestBody),
       });
 
+      const duration = Date.now() - startTime;
+      log("INFO", `[${requestId}] Backend response`, {
+        status: response.status,
+        statusText: response.statusText,
+        duration: `${duration}ms`,
+        contentType: response.headers.get("content-type"),
+      });
+
       if (!response.ok) {
         const error = await response.text();
-        console.error("Sora2mb API error:", error);
+        log("ERROR", `[${requestId}] Backend API error`, {
+          status: response.status,
+          error: error.slice(0, 500),
+        });
         return new Response(error, {
           status: response.status,
           headers: {
@@ -77,6 +121,7 @@ async function handler(req: Request): Promise<Response> {
 
       // Handle streaming response
       if (requestBody.stream && response.body) {
+        log("INFO", `[${requestId}] Streaming response started`);
         return new Response(response.body, {
           headers: {
             "Access-Control-Allow-Origin": "*",
@@ -88,6 +133,7 @@ async function handler(req: Request): Promise<Response> {
       }
 
       const data = await response.json();
+      log("INFO", `[${requestId}] Non-streaming response completed`);
       return new Response(JSON.stringify(data), {
         headers: {
           "Access-Control-Allow-Origin": "*",
@@ -98,6 +144,7 @@ async function handler(req: Request): Promise<Response> {
 
     // Models endpoint
     if (url.pathname === "/v1/models" && req.method === "GET") {
+      log("INFO", `[${requestId}] Models list requested`);
       const models = {
         object: "list",
         data: [
@@ -114,6 +161,7 @@ async function handler(req: Request): Promise<Response> {
           { id: "sora-video-portrait-15s", object: "model", owned_by: "sora2mb" },
         ],
       };
+      log("INFO", `[${requestId}] Returning ${models.data.length} models`);
       return new Response(JSON.stringify(models), {
         headers: {
           "Access-Control-Allow-Origin": "*",
@@ -122,6 +170,7 @@ async function handler(req: Request): Promise<Response> {
       });
     }
 
+    log("WARN", `[${requestId}] Route not found: ${url.pathname}`);
     return new Response(JSON.stringify({ error: "Not found" }), {
       status: 404,
       headers: {
@@ -131,10 +180,13 @@ async function handler(req: Request): Promise<Response> {
     });
 
   } catch (error) {
-    console.error("Server error:", error);
+    log("ERROR", `[${requestId}] Server error`, {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack?.slice(0, 500) : undefined,
+    });
     return new Response(JSON.stringify({
       error: "Internal server error",
-      details: error.message
+      details: error instanceof Error ? error.message : String(error)
     }), {
       status: 500,
       headers: {
@@ -146,8 +198,13 @@ async function handler(req: Request): Promise<Response> {
 }
 
 const port = parseInt(Deno.env.get("PORT") || "8000");
-console.log(`Server running on port ${port}`);
-console.log(`API Base URL: ${API_BASE_URL}`);
-console.log(`API Key configured: ${API_KEY ? "Yes" : "No"}`);
+log("INFO", "=".repeat(60));
+log("INFO", "🚀 SoraDeno Server Starting");
+log("INFO", "=".repeat(60));
+log("INFO", `Server running on port ${port}`);
+log("INFO", `API Base URL: ${API_BASE_URL}`);
+log("INFO", `API Key configured: ${API_KEY ? "Yes (length: " + API_KEY.length + ")" : "No"}`);
+log("INFO", `Environment: ${Deno.env.get("DENO_DEPLOYMENT_ID") ? "Deno Deploy" : "Local"}`);
+log("INFO", "=".repeat(60));
 
 serve(handler, { port });

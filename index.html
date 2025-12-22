@@ -3,304 +3,1168 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SoraDeno - Sora2mb API 代理</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>SoraDeno - AI 视频与图片生成平台</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        .loading-spinner {
-            border: 2px solid #f3f3f3;
-            border-top: 2px solid #3498db;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --secondary: #8b5cf6;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --bg-dark: #0f172a;
+            --bg-card: #1e293b;
+            --bg-card-hover: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border: #334155;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        /* Header */
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+            padding: 2rem 0;
+        }
+
+        .logo {
+            font-size: 3rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.5rem;
+            animation: gradient 3s ease infinite;
+        }
+
+        @keyframes gradient {
+            0%, 100% { filter: hue-rotate(0deg); }
+            50% { filter: hue-rotate(20deg); }
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            background: var(--bg-card);
+            padding: 0.5rem;
+            border-radius: 1rem;
+            overflow-x: auto;
+        }
+
+        .tab {
+            flex: 1;
+            min-width: 120px;
+            padding: 0.75rem 1.5rem;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            font-weight: 500;
+            cursor: pointer;
+            border-radius: 0.75rem;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+        }
+
+        .tab:hover {
+            background: var(--bg-card-hover);
+            color: var(--text-primary);
+        }
+
+        .tab.active {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+
+        /* Tab Content */
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Card */
+        .card {
+            background: var(--bg-card);
+            border-radius: 1rem;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            border: 1px solid var(--border);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            border-color: var(--primary);
+            box-shadow: 0 8px 24px rgba(99, 102, 241, 0.15);
+        }
+
+        .card-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        /* Form */
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        input[type="text"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+        }
+
+        input[type="text"]:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        /* File Upload */
+        .file-upload {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .file-upload input[type="file"] {
+            display: none;
+        }
+
+        .file-upload-label {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 3rem 1rem;
+            background: var(--bg-dark);
+            border: 2px dashed var(--border);
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+
+        .file-upload-label:hover {
+            border-color: var(--primary);
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        .file-preview {
+            margin-top: 1rem;
+            max-width: 300px;
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+
+        .file-preview img,
+        .file-preview video {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        /* Button */
+        .btn {
+            padding: 0.75rem 2rem;
+            border: none;
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            justify-content: center;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: var(--bg-card-hover);
+            color: var(--text-primary);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border);
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top: 3px solid var(--primary);
             border-radius: 50%;
             width: 20px;
             height: 20px;
             animation: spin 1s linear infinite;
-            display: inline-block;
         }
+
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        .status-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 6px;
+
+        /* Result Display */
+        .result-container {
+            margin-top: 2rem;
         }
-        .status-online { background-color: #22c55e; }
-        .status-offline { background-color: #ef4444; }
-        .status-checking { background-color: #f59e0b; animation: pulse 1s infinite; }
+
+        .result-item {
+            background: var(--bg-dark);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            border: 1px solid var(--border);
+        }
+
+        .result-media {
+            width: 100%;
+            max-width: 800px;
+            margin: 1rem auto;
+            border-radius: 0.5rem;
+            overflow: hidden;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        }
+
+        .result-media img,
+        .result-media video {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        /* Status Badge */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 2rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .status-online {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+        }
+
+        .status-offline {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+            animation: pulse 2s ease infinite;
+        }
+
         @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
         }
+
+        /* Grid Layout */
+        .grid {
+            display: grid;
+            gap: 1.5rem;
+        }
+
+        .grid-2 {
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        }
+
+        /* Model Selection */
+        .model-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .model-card {
+            background: var(--bg-dark);
+            border: 2px solid var(--border);
+            border-radius: 0.75rem;
+            padding: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+
+        .model-card:hover {
+            border-color: var(--primary);
+            transform: translateY(-2px);
+        }
+
+        .model-card.selected {
+            border-color: var(--primary);
+            background: rgba(99, 102, 241, 0.1);
+        }
+
+        .model-name {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .model-info {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        /* History */
+        .history-item {
+            background: var(--bg-dark);
+            border-radius: 0.75rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            display: flex;
+            gap: 1rem;
+            align-items: start;
+            border: 1px solid var(--border);
+            transition: all 0.3s ease;
+        }
+
+        .history-item:hover {
+            border-color: var(--primary);
+        }
+
+        .history-thumbnail {
+            width: 120px;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 0.5rem;
+            flex-shrink: 0;
+        }
+
+        .history-content {
+            flex: 1;
+        }
+
+        .history-prompt {
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+        }
+
+        .history-meta {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+
+            .logo {
+                font-size: 2rem;
+            }
+
+            .tabs {
+                flex-wrap: nowrap;
+                overflow-x: auto;
+            }
+
+            .card {
+                padding: 1.5rem;
+            }
+
+            .model-grid {
+                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            }
+        }
+
+        /* Toast Notification */
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            background: var(--bg-card);
+            padding: 1rem 1.5rem;
+            border-radius: 0.75rem;
+            border: 1px solid var(--border);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .toast.success {
+            border-left: 4px solid var(--success);
+        }
+
+        .toast.error {
+            border-left: 4px solid var(--danger);
+        }
+
+        /* Stream Output */
+        .stream-output {
+            background: var(--bg-dark);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-top: 1rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.875rem;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .stream-output::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .stream-output::-webkit-scrollbar-track {
+            background: var(--bg-card);
+            border-radius: 4px;
+        }
+
+        .stream-output::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 4px;
+        }
+
+        .stream-output::-webkit-scrollbar-thumb:hover {
+            background: var(--primary);
+        }
     </style>
 </head>
-<body class="bg-gray-900 text-white min-h-screen">
-    <div class="container mx-auto px-4 py-8 max-w-5xl">
-        <header class="text-center mb-8">
-            <h1 class="text-4xl font-bold mb-2 bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-                SoraDeno
-            </h1>
-            <p class="text-gray-400">Sora2mb API 代理服务</p>
+<body>
+    <div class="container">
+        <header>
+            <h1 class="logo">🎬 SoraDeno</h1>
+            <p class="subtitle">AI 驱动的视频与图片生成平台</p>
         </header>
 
-        <!-- API Status Section -->
-        <div class="bg-gray-800 rounded-lg p-6 mb-8">
-            <h2 class="text-xl font-semibold mb-4">🔌 API 状态</h2>
-            <div class="grid md:grid-cols-2 gap-6">
-                <!-- Backend API Status -->
-                <div class="bg-gray-700 rounded-lg p-4">
-                    <h3 class="font-medium mb-3">后端 API (Sora2mb)</h3>
-                    <div class="space-y-2 text-sm">
-                        <div class="flex justify-between">
-                            <span class="text-gray-400">地址:</span>
-                            <a href="https://iyougame-soarmb.hf.space" target="_blank" class="text-blue-400 hover:underline truncate ml-2">
-                                iyougame-soarmb.hf.space
-                            </a>
-                        </div>
-                        <div class="flex justify-between items-center">
-                            <span class="text-gray-400">状态:</span>
-                            <span id="backendStatus" class="flex items-center">
-                                <span class="status-dot status-checking"></span>
-                                <span>检测中...</span>
-                            </span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-gray-400">响应时间:</span>
-                            <span id="backendLatency">-</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Local Proxy Status -->
-                <div class="bg-gray-700 rounded-lg p-4">
-                    <h3 class="font-medium mb-3">本地代理 (SoraDeno)</h3>
-                    <div class="space-y-2 text-sm">
-                        <div class="flex justify-between">
-                            <span class="text-gray-400">地址:</span>
-                            <span id="proxyUrl" class="text-blue-400 truncate ml-2"></span>
-                        </div>
-                        <div class="flex justify-between items-center">
-                            <span class="text-gray-400">状态:</span>
-                            <span id="proxyStatus" class="flex items-center">
-                                <span class="status-dot status-checking"></span>
-                                <span>检测中...</span>
-                            </span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-gray-400">检测时间:</span>
-                            <span id="checkTime">-</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <button id="refreshStatus" onclick="checkAllStatus()" class="mt-4 bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded text-sm transition-colors">
-                🔄 刷新状态
-            </button>
-        </div>
-
-        <!-- Available Models Section -->
-        <div class="bg-gray-800 rounded-lg p-6 mb-8">
-            <h2 class="text-xl font-semibold mb-4">🎨 可用模型</h2>
-            <div class="grid md:grid-cols-2 gap-6">
-                <!-- Image Models -->
+        <!-- Status Bar -->
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
                 <div>
-                    <h3 class="font-medium mb-3 text-green-400">🖼️ 图片模型</h3>
-                    <div id="imageModels" class="space-y-2">
-                        <div class="text-gray-400 text-sm">加载中...</div>
-                    </div>
+                    <span class="status-badge" id="apiStatus">
+                        <span class="status-dot"></span>
+                        <span>检测中...</span>
+                    </span>
                 </div>
-                <!-- Video Models -->
-                <div>
-                    <h3 class="font-medium mb-3 text-purple-400">🎬 视频模型</h3>
-                    <div id="videoModels" class="space-y-2">
-                        <div class="text-gray-400 text-sm">加载中...</div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Features -->
-            <div class="mt-6 pt-4 border-t border-gray-700">
-                <h3 class="font-medium mb-3 text-yellow-400">✨ 支持的功能</h3>
-                <div class="grid md:grid-cols-3 gap-2 text-sm text-gray-300">
-                    <div>• 文生图 / 图生图</div>
-                    <div>• 文生视频 / 图生视频</div>
-                    <div>• 视频角色功能</div>
-                    <div>• Remix 视频创作</div>
-                    <div>• 分镜视频生成</div>
-                    <div>• 流式响应</div>
+                <div style="display: flex; gap: 1rem; align-items: center;">
+                    <span style="font-size: 0.875rem; color: var(--text-secondary);">
+                        API: <code style="color: var(--primary);" id="apiUrl"></code>
+                    </span>
+                    <button class="btn btn-secondary" onclick="checkStatus()" style="padding: 0.5rem 1rem;">
+                        🔄 刷新
+                    </button>
                 </div>
             </div>
         </div>
 
-        <!-- API Info Section -->
-        <div class="bg-gray-800 rounded-lg p-6 mb-8">
-            <h2 class="text-xl font-semibold mb-4">📖 API 使用说明</h2>
-            
-            <div class="space-y-4">
-                <!-- Endpoint Info -->
-                <div class="bg-gray-700 rounded p-4">
-                    <h3 class="font-medium mb-2">端点信息</h3>
-                    <div class="space-y-2 text-sm">
-                        <div class="flex flex-wrap gap-2">
-                            <span class="text-gray-400">Chat Completions:</span>
-                            <code id="chatEndpoint" class="bg-gray-600 px-2 py-1 rounded text-green-400"></code>
-                        </div>
-                        <div class="flex flex-wrap gap-2">
-                            <span class="text-gray-400">Models:</span>
-                            <code id="modelsEndpoint" class="bg-gray-600 px-2 py-1 rounded text-green-400"></code>
-                        </div>
-                    </div>
-                </div>
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('video')">🎬 视频生成</button>
+            <button class="tab" onclick="switchTab('image')">🖼️ 图片生成</button>
+            <button class="tab" onclick="switchTab('advanced')">⚡ 高级功能</button>
+            <button class="tab" onclick="switchTab('history')">📚 历史记录</button>
+        </div>
 
-                <!-- Example -->
-                <div class="bg-gray-900 rounded p-4 overflow-x-auto">
-                    <h3 class="font-medium mb-2 text-gray-300">请求示例</h3>
-                    <pre id="apiExample" class="text-sm text-green-400"><code>curl -X POST "<span id="exampleUrl"></span>/v1/chat/completions" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "sora-video-landscape-10s",
-    "messages": [{"role": "user", "content": "一只小猫在草地上奔跑"}],
-    "stream": true
-  }'</code></pre>
-                </div>
-                <button onclick="copyApiExample()" class="bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded text-sm transition-colors">
-                    📋 复制示例
-                </button>
+        <!-- Video Generation Tab -->
+        <div id="video-tab" class="tab-content active">
+            <div class="card">
+                <h2 class="card-title">🎬 视频生成</h2>
                 
-                <!-- Note -->
-                <div class="bg-yellow-900/30 border border-yellow-700 rounded p-4 text-sm">
-                    <p class="text-yellow-400 font-medium mb-1">⚠️ 注意事项</p>
-                    <ul class="text-yellow-200 space-y-1">
-                        <li>• 此代理服务需要后端 Sora2mb 有可用的 Sora Token</li>
-                        <li>• 如果出现 503 错误，说明后端暂无可用凭证</li>
-                        <li>• API Key 由服务端配置，无需在请求中提供</li>
-                        <li>• 建议使用流式模式 (stream: true)</li>
-                    </ul>
+                <div class="form-group">
+                    <label>选择模型</label>
+                    <div class="model-grid" id="videoModels"></div>
+                </div>
+
+                <div class="form-group">
+                    <label>生成方式</label>
+                    <select id="videoMode" onchange="toggleVideoMode()">
+                        <option value="text">文生视频</option>
+                        <option value="image">图生视频</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>提示词</label>
+                    <textarea id="videoPrompt" placeholder="描述你想要生成的视频内容，例如：一只小猫在草地上奔跑"></textarea>
+                </div>
+
+                <div class="form-group" id="videoImageUpload" style="display: none;">
+                    <label>上传参考图片</label>
+                    <div class="file-upload">
+                        <input type="file" id="videoImageFile" accept="image/*" onchange="previewFile(this, 'videoImagePreview')">
+                        <label for="videoImageFile" class="file-upload-label">
+                            <span>📁 点击上传图片或拖拽到此处</span>
+                        </label>
+                    </div>
+                    <div id="videoImagePreview" class="file-preview"></div>
+                </div>
+
+                <button class="btn btn-primary" onclick="generateVideo()" id="videoGenerateBtn">
+                    <span>🎬 生成视频</span>
+                </button>
+
+                <div id="videoStreamOutput" class="stream-output" style="display: none;"></div>
+                <div id="videoResult" class="result-container"></div>
+            </div>
+        </div>
+
+        <!-- Image Generation Tab -->
+        <div id="image-tab" class="tab-content">
+            <div class="card">
+                <h2 class="card-title">🖼️ 图片生成</h2>
+                
+                <div class="form-group">
+                    <label>选择模型</label>
+                    <div class="model-grid" id="imageModels"></div>
+                </div>
+
+                <div class="form-group">
+                    <label>生成方式</label>
+                    <select id="imageMode" onchange="toggleImageMode()">
+                        <option value="text">文生图</option>
+                        <option value="image">图生图</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>提示词</label>
+                    <textarea id="imagePrompt" placeholder="描述你想要生成的图片内容，例如：一只可爱的小猫咪"></textarea>
+                </div>
+
+                <div class="form-group" id="imageImageUpload" style="display: none;">
+                    <label>上传参考图片</label>
+                    <div class="file-upload">
+                        <input type="file" id="imageImageFile" accept="image/*" onchange="previewFile(this, 'imageImagePreview')">
+                        <label for="imageImageFile" class="file-upload-label">
+                            <span>📁 点击上传图片或拖拽到此处</span>
+                        </label>
+                    </div>
+                    <div id="imageImagePreview" class="file-preview"></div>
+                </div>
+
+                <button class="btn btn-primary" onclick="generateImage()" id="imageGenerateBtn">
+                    <span>🖼️ 生成图片</span>
+                </button>
+
+                <div id="imageStreamOutput" class="stream-output" style="display: none;"></div>
+                <div id="imageResult" class="result-container"></div>
+            </div>
+        </div>
+
+        <!-- Advanced Features Tab -->
+        <div id="advanced-tab" class="tab-content">
+            <div class="grid grid-2">
+                <!-- Remix -->
+                <div class="card">
+                    <h2 class="card-title">🔄 Remix 视频</h2>
+                    <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">
+                        基于已有视频继续创作
+                    </p>
+                    
+                    <div class="form-group">
+                        <label>视频分享链接或 ID</label>
+                        <input type="text" id="remixUrl" placeholder="https://sora.chatgpt.com/p/xxx 或直接输入 ID">
+                    </div>
+
+                    <div class="form-group">
+                        <label>创作提示词</label>
+                        <textarea id="remixPrompt" placeholder="例如：改成水墨画风格"></textarea>
+                    </div>
+
+                    <button class="btn btn-primary" onclick="generateRemix()">
+                        <span>🔄 开始 Remix</span>
+                    </button>
+
+                    <div id="remixStreamOutput" class="stream-output" style="display: none;"></div>
+                    <div id="remixResult" class="result-container"></div>
+                </div>
+
+                <!-- Storyboard -->
+                <div class="card">
+                    <h2 class="card-title">🎞️ 分镜视频</h2>
+                    <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">
+                        创建多段分镜视频
+                    </p>
+                    
+                    <div class="form-group">
+                        <label>分镜脚本</label>
+                        <textarea id="storyboardPrompt" placeholder="格式：[时长s]描述&#10;例如：&#10;[5.0s]猫猫从飞机上跳伞&#10;[5.0s]猫猫降落&#10;[10.0s]猫猫在田野奔跑" rows="6"></textarea>
+                    </div>
+
+                    <button class="btn btn-primary" onclick="generateStoryboard()">
+                        <span>🎞️ 生成分镜</span>
+                    </button>
+
+                    <div id="storyboardStreamOutput" class="stream-output" style="display: none;"></div>
+                    <div id="storyboardResult" class="result-container"></div>
                 </div>
             </div>
         </div>
 
-        <!-- Footer -->
-        <footer class="mt-8 text-center text-gray-500 text-sm">
-            <p>Powered by <a href="https://github.com/iudd/Sora2mb" target="_blank" class="text-blue-400 hover:underline">Sora2mb</a> | 
-            <a href="https://github.com/iudd/soradeno" target="_blank" class="text-blue-400 hover:underline">SoraDeno</a></p>
-        </footer>
+        <!-- History Tab -->
+        <div id="history-tab" class="tab-content">
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                    <h2 class="card-title" style="margin: 0;">📚 生成历史</h2>
+                    <button class="btn btn-secondary" onclick="clearHistory()" style="padding: 0.5rem 1rem;">
+                        🗑️ 清空历史
+                    </button>
+                </div>
+                <div id="historyList"></div>
+            </div>
+        </div>
     </div>
 
     <script>
         const API_BASE = window.location.origin;
-        const BACKEND_API = 'https://iyougame-soarmb.hf.space';
+        let selectedVideoModel = 'sora-video-landscape-10s';
+        let selectedImageModel = 'sora-image';
+        let generationHistory = JSON.parse(localStorage.getItem('generationHistory') || '[]');
 
         // Initialize
         window.addEventListener('DOMContentLoaded', () => {
-            document.getElementById('proxyUrl').textContent = API_BASE;
-            document.getElementById('exampleUrl').textContent = API_BASE;
-            document.getElementById('chatEndpoint').textContent = `${API_BASE}/v1/chat/completions`;
-            document.getElementById('modelsEndpoint').textContent = `${API_BASE}/v1/models`;
-            checkAllStatus();
+            document.getElementById('apiUrl').textContent = API_BASE;
+            checkStatus();
             loadModels();
+            loadHistory();
         });
 
-        // Check all API status
-        async function checkAllStatus() {
-            checkBackendStatus();
-            checkProxyStatus();
-        }
+        // Check API Status
+        async function checkStatus() {
+            const statusEl = document.getElementById('apiStatus');
+            statusEl.innerHTML = '<span class="status-dot"></span><span>检测中...</span>';
+            statusEl.className = 'status-badge';
 
-        // Check backend API status
-        async function checkBackendStatus() {
-            const statusEl = document.getElementById('backendStatus');
-            const latencyEl = document.getElementById('backendLatency');
-            
-            statusEl.innerHTML = '<span class="status-dot status-checking"></span><span>检测中...</span>';
-            
-            const startTime = Date.now();
-            try {
-                const response = await fetch(`${BACKEND_API}/`, {
-                    method: 'GET',
-                    mode: 'no-cors'
-                });
-                const latency = Date.now() - startTime;
-                
-                statusEl.innerHTML = '<span class="status-dot status-online"></span><span class="text-green-400">在线</span>';
-                latencyEl.textContent = `${latency}ms`;
-            } catch (error) {
-                statusEl.innerHTML = '<span class="status-dot status-offline"></span><span class="text-red-400">离线</span>';
-                latencyEl.textContent = '-';
-            }
-        }
-
-        // Check local proxy status
-        async function checkProxyStatus() {
-            const statusEl = document.getElementById('proxyStatus');
-            const timeEl = document.getElementById('checkTime');
-            
-            statusEl.innerHTML = '<span class="status-dot status-checking"></span><span>检测中...</span>';
-            
             try {
                 const response = await fetch(`${API_BASE}/health`);
                 const data = await response.json();
                 
                 if (response.ok && data.status === 'ok') {
-                    statusEl.innerHTML = '<span class="status-dot status-online"></span><span class="text-green-400">在线</span>';
+                    statusEl.innerHTML = '<span class="status-dot"></span><span>在线</span>';
+                    statusEl.classList.add('status-online');
                 } else {
-                    statusEl.innerHTML = '<span class="status-dot status-offline"></span><span class="text-red-400">异常</span>';
+                    statusEl.innerHTML = '<span class="status-dot"></span><span>异常</span>';
+                    statusEl.classList.add('status-offline');
                 }
-                timeEl.textContent = new Date().toLocaleTimeString();
             } catch (error) {
-                statusEl.innerHTML = '<span class="status-dot status-offline"></span><span class="text-red-400">离线</span>';
-                timeEl.textContent = new Date().toLocaleTimeString();
+                statusEl.innerHTML = '<span class="status-dot"></span><span>离线</span>';
+                statusEl.classList.add('status-offline');
             }
         }
 
-        // Load available models
-        async function loadModels() {
-            const imageModelsEl = document.getElementById('imageModels');
-            const videoModelsEl = document.getElementById('videoModels');
+        // Load Models
+        function loadModels() {
+            const videoModels = [
+                { id: 'sora-video-10s', name: '默认 10秒', info: '360×360' },
+                { id: 'sora-video-15s', name: '默认 15秒', info: '360×360' },
+                { id: 'sora-video-landscape-10s', name: '横屏 10秒', info: '540×360' },
+                { id: 'sora-video-landscape-15s', name: '横屏 15秒', info: '540×360' },
+                { id: 'sora-video-portrait-10s', name: '竖屏 10秒', info: '360×540' },
+                { id: 'sora-video-portrait-15s', name: '竖屏 15秒', info: '360×540' },
+            ];
 
-            const models = {
-                image: [
-                    { id: 'sora-image', name: '默认', size: '360×360' },
-                    { id: 'sora-image-landscape', name: '横屏', size: '540×360' },
-                    { id: 'sora-image-portrait', name: '竖屏', size: '360×540' },
-                ],
-                video: [
-                    { id: 'sora-video-10s', name: '10秒', duration: '10s' },
-                    { id: 'sora-video-15s', name: '15秒', duration: '15s' },
-                    { id: 'sora-video-landscape-10s', name: '横屏 10秒', duration: '10s' },
-                    { id: 'sora-video-landscape-15s', name: '横屏 15秒', duration: '15s' },
-                    { id: 'sora-video-portrait-10s', name: '竖屏 10秒', duration: '10s' },
-                    { id: 'sora-video-portrait-15s', name: '竖屏 15秒', duration: '15s' },
-                ],
-            };
+            const imageModels = [
+                { id: 'sora-image', name: '默认', info: '360×360' },
+                { id: 'sora-image-landscape', name: '横屏', info: '540×360' },
+                { id: 'sora-image-portrait', name: '竖屏', info: '360×540' },
+            ];
 
-            imageModelsEl.innerHTML = models.image.map(m => `
-                <div class="bg-gray-600 rounded px-3 py-2 text-sm flex justify-between">
-                    <span class="font-mono">${m.id}</span>
-                    <span class="text-gray-400">${m.size}</span>
+            document.getElementById('videoModels').innerHTML = videoModels.map(m => `
+                <div class="model-card ${m.id === selectedVideoModel ? 'selected' : ''}" onclick="selectModel('video', '${m.id}')">
+                    <div class="model-name">${m.name}</div>
+                    <div class="model-info">${m.info}</div>
                 </div>
             `).join('');
 
-            videoModelsEl.innerHTML = models.video.map(m => `
-                <div class="bg-gray-600 rounded px-3 py-2 text-sm flex justify-between">
-                    <span class="font-mono">${m.id}</span>
-                    <span class="text-gray-400">${m.duration}</span>
+            document.getElementById('imageModels').innerHTML = imageModels.map(m => `
+                <div class="model-card ${m.id === selectedImageModel ? 'selected' : ''}" onclick="selectModel('image', '${m.id}')">
+                    <div class="model-name">${m.name}</div>
+                    <div class="model-info">${m.info}</div>
                 </div>
             `).join('');
         }
 
-        // Copy API example
-        function copyApiExample() {
-            const example = document.getElementById('apiExample').textContent;
-            navigator.clipboard.writeText(example).then(() => {
-                const btn = event.target;
-                const originalText = btn.textContent;
-                btn.textContent = '✅ 已复制!';
-                setTimeout(() => {
-                    btn.textContent = originalText;
-                }, 1500);
+        // Select Model
+        function selectModel(type, modelId) {
+            if (type === 'video') {
+                selectedVideoModel = modelId;
+                document.querySelectorAll('#videoModels .model-card').forEach(card => {
+                    card.classList.toggle('selected', card.onclick.toString().includes(modelId));
+                });
+            } else {
+                selectedImageModel = modelId;
+                document.querySelectorAll('#imageModels .model-card').forEach(card => {
+                    card.classList.toggle('selected', card.onclick.toString().includes(modelId));
+                });
+            }
+        }
+
+        // Switch Tab
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+        }
+
+        // Toggle Mode
+        function toggleVideoMode() {
+            const mode = document.getElementById('videoMode').value;
+            document.getElementById('videoImageUpload').style.display = mode === 'image' ? 'block' : 'none';
+        }
+
+        function toggleImageMode() {
+            const mode = document.getElementById('imageMode').value;
+            document.getElementById('imageImageUpload').style.display = mode === 'image' ? 'block' : 'none';
+        }
+
+        // Preview File
+        function previewFile(input, previewId) {
+            const preview = document.getElementById(previewId);
+            const file = input.files[0];
+            
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    if (file.type.startsWith('image/')) {
+                        preview.innerHTML = `<img src="${e.target.result}" alt="Preview">`;
+                    } else if (file.type.startsWith('video/')) {
+                        preview.innerHTML = `<video src="${e.target.result}" controls></video>`;
+                    }
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // Convert File to Base64
+        async function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
             });
+        }
+
+        // Generate Video
+        async function generateVideo() {
+            const prompt = document.getElementById('videoPrompt').value.trim();
+            if (!prompt) {
+                showToast('请输入提示词', 'error');
+                return;
+            }
+
+            const mode = document.getElementById('videoMode').value;
+            const btn = document.getElementById('videoGenerateBtn');
+            const streamOutput = document.getElementById('videoStreamOutput');
+            const resultDiv = document.getElementById('videoResult');
+
+            btn.disabled = true;
+            btn.innerHTML = '<div class="spinner"></div><span>生成中...</span>';
+            streamOutput.style.display = 'block';
+            streamOutput.textContent = '';
+            resultDiv.innerHTML = '';
+
+            try {
+                let messages = [];
+                
+                if (mode === 'image') {
+                    const fileInput = document.getElementById('videoImageFile');
+                    if (!fileInput.files[0]) {
+                        showToast('请上传参考图片', 'error');
+                        btn.disabled = false;
+                        btn.innerHTML = '<span>🎬 生成视频</span>';
+                        return;
+                    }
+                    
+                    const base64 = await fileToBase64(fileInput.files[0]);
+                    messages = [{
+                        role: 'user',
+                        content: [
+                            { type: 'text', text: prompt },
+                            { type: 'image_url', image_url: { url: base64 } }
+                        ]
+                    }];
+                } else {
+                    messages = [{ role: 'user', content: prompt }];
+                }
+
+                await streamGeneration(selectedVideoModel, messages, streamOutput, resultDiv, 'video', prompt);
+            } catch (error) {
+                showToast('生成失败: ' + error.message, 'error');
+                streamOutput.textContent += '\n错误: ' + error.message;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span>🎬 生成视频</span>';
+            }
+        }
+
+        // Generate Image
+        async function generateImage() {
+            const prompt = document.getElementById('imagePrompt').value.trim();
+            if (!prompt) {
+                showToast('请输入提示词', 'error');
+                return;
+            }
+
+            const mode = document.getElementById('imageMode').value;
+            const btn = document.getElementById('imageGenerateBtn');
+            const streamOutput = document.getElementById('imageStreamOutput');
+            const resultDiv = document.getElementById('imageResult');
+
+            btn.disabled = true;
+            btn.innerHTML = '<div class="spinner"></div><span>生成中...</span>';
+            streamOutput.style.display = 'block';
+            streamOutput.textContent = '';
+            resultDiv.innerHTML = '';
+
+            try {
+                let messages = [];
+                
+                if (mode === 'image') {
+                    const fileInput = document.getElementById('imageImageFile');
+                    if (!fileInput.files[0]) {
+                        showToast('请上传参考图片', 'error');
+                        btn.disabled = false;
+                        btn.innerHTML = '<span>🖼️ 生成图片</span>';
+                        return;
+                    }
+                    
+                    const base64 = await fileToBase64(fileInput.files[0]);
+                    messages = [{
+                        role: 'user',
+                        content: [
+                            { type: 'text', text: prompt },
+                            { type: 'image_url', image_url: { url: base64 } }
+                        ]
+                    }];
+                } else {
+                    messages = [{ role: 'user', content: prompt }];
+                }
+
+                await streamGeneration(selectedImageModel, messages, streamOutput, resultDiv, 'image', prompt);
+            } catch (error) {
+                showToast('生成失败: ' + error.message, 'error');
+                streamOutput.textContent += '\n错误: ' + error.message;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span>🖼️ 生成图片</span>';
+            }
+        }
+
+        // Generate Remix
+        async function generateRemix() {
+            const url = document.getElementById('remixUrl').value.trim();
+            const prompt = document.getElementById('remixPrompt').value.trim();
+            
+            if (!url || !prompt) {
+                showToast('请填写视频链接和提示词', 'error');
+                return;
+            }
+
+            const streamOutput = document.getElementById('remixStreamOutput');
+            const resultDiv = document.getElementById('remixResult');
+
+            streamOutput.style.display = 'block';
+            streamOutput.textContent = '';
+            resultDiv.innerHTML = '';
+
+            const fullPrompt = `${url} ${prompt}`;
+            const messages = [{ role: 'user', content: fullPrompt }];
+
+            try {
+                await streamGeneration('sora-video-landscape-10s', messages, streamOutput, resultDiv, 'video', fullPrompt);
+            } catch (error) {
+                showToast('Remix 失败: ' + error.message, 'error');
+                streamOutput.textContent += '\n错误: ' + error.message;
+            }
+        }
+
+        // Generate Storyboard
+        async function generateStoryboard() {
+            const prompt = document.getElementById('storyboardPrompt').value.trim();
+            
+            if (!prompt) {
+                showToast('请输入分镜脚本', 'error');
+                return;
+            }
+
+            const streamOutput = document.getElementById('storyboardStreamOutput');
+            const resultDiv = document.getElementById('storyboardResult');
+
+            streamOutput.style.display = 'block';
+            streamOutput.textContent = '';
+            resultDiv.innerHTML = '';
+
+            const messages = [{ role: 'user', content: prompt }];
+
+            try {
+                await streamGeneration('sora-video-landscape-10s', messages, streamOutput, resultDiv, 'video', prompt);
+            } catch (error) {
+                showToast('分镜生成失败: ' + error.message, 'error');
+                streamOutput.textContent += '\n错误: ' + error.message;
+            }
+        }
+
+        // Stream Generation
+        async function streamGeneration(model, messages, streamOutput, resultDiv, type, prompt) {
+            const response = await fetch(`${API_BASE}/v1/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    model: model,
+                    messages: messages,
+                    stream: true
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let mediaUrl = null;
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop();
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const data = line.slice(6);
+                        if (data === '[DONE]') continue;
+
+                        try {
+                            const json = JSON.parse(data);
+                            const content = json.choices?.[0]?.delta?.content || '';
+                            
+                            if (content) {
+                                streamOutput.textContent += content;
+                                streamOutput.scrollTop = streamOutput.scrollHeight;
+
+                                // Extract media URL
+                                const urlMatch = content.match(/https?:\/\/[^\s\)]+/);
+                                if (urlMatch) {
+                                    mediaUrl = urlMatch[0];
+                                }
+                            }
+                        } catch (e) {
+                            console.error('Parse error:', e);
+                        }
+                    }
+                }
+            }
+
+            // Display result
+            if (mediaUrl) {
+                const mediaHtml = type === 'video' 
+                    ? `<video src="${mediaUrl}" controls class="result-media"></video>`
+                    : `<img src="${mediaUrl}" alt="Generated" class="result-media">`;
+                
+                resultDiv.innerHTML = `
+                    <div class="result-item">
+                        <div style="margin-bottom: 1rem;">
+                            <strong>生成成功!</strong>
+                            <p style="color: var(--text-secondary); margin-top: 0.5rem;">${prompt}</p>
+                        </div>
+                        ${mediaHtml}
+                        <div style="margin-top: 1rem;">
+                            <a href="${mediaUrl}" target="_blank" class="btn btn-secondary" style="padding: 0.5rem 1rem;">
+                                📥 下载${type === 'video' ? '视频' : '图片'}
+                            </a>
+                        </div>
+                    </div>
+                `;
+
+                // Save to history
+                saveToHistory({
+                    type: type,
+                    prompt: prompt,
+                    url: mediaUrl,
+                    model: model,
+                    timestamp: Date.now()
+                });
+
+                showToast('生成成功!', 'success');
+            } else {
+                showToast('未能提取媒体链接', 'error');
+            }
+        }
+
+        // History Management
+        function saveToHistory(item) {
+            generationHistory.unshift(item);
+            if (generationHistory.length > 50) {
+                generationHistory = generationHistory.slice(0, 50);
+            }
+            localStorage.setItem('generationHistory', JSON.stringify(generationHistory));
+            loadHistory();
+        }
+
+        function loadHistory() {
+            const historyList = document.getElementById('historyList');
+            
+            if (generationHistory.length === 0) {
+                historyList.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 2rem;">暂无生成记录</p>';
+                return;
+            }
+
+            historyList.innerHTML = generationHistory.map((item, index) => `
+                <div class="history-item">
+                    ${item.type === 'video' 
+                        ? `<video src="${item.url}" class="history-thumbnail" muted></video>`
+                        : `<img src="${item.url}" class="history-thumbnail" alt="Thumbnail">`
+                    }
+                    <div class="history-content">
+                        <div class="history-prompt">${item.prompt}</div>
+                        <div class="history-meta">
+                            ${item.type === 'video' ? '🎬 视频' : '🖼️ 图片'} · 
+                            ${item.model} · 
+                            ${new Date(item.timestamp).toLocaleString('zh-CN')}
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <a href="${item.url}" target="_blank" class="btn btn-secondary" style="padding: 0.5rem 1rem;">
+                            📥 下载
+                        </a>
+                        <button class="btn btn-secondary" onclick="deleteHistory(${index})" style="padding: 0.5rem 1rem;">
+                            🗑️
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function deleteHistory(index) {
+            if (confirm('确定要删除这条记录吗?')) {
+                generationHistory.splice(index, 1);
+                localStorage.setItem('generationHistory', JSON.stringify(generationHistory));
+                loadHistory();
+                showToast('已删除', 'success');
+            }
+        }
+
+        function clearHistory() {
+            if (confirm('确定要清空所有历史记录吗?')) {
+                generationHistory = [];
+                localStorage.setItem('generationHistory', JSON.stringify(generationHistory));
+                loadHistory();
+                showToast('已清空历史记录', 'success');
+            }
+        }
+
+        // Toast Notification
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.animation = 'slideIn 0.3s ease reverse';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
         }
     </script>
 </body>

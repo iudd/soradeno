@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SoraDeno - OpenAI 文本生视频</title>
+    <title>SoraDeno - Sora2mb API 代理</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .loading-spinner {
@@ -13,57 +13,134 @@
             width: 20px;
             height: 20px;
             animation: spin 1s linear infinite;
+            display: inline-block;
         }
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
+        }
+        .status-online { background-color: #22c55e; }
+        .status-offline { background-color: #ef4444; }
+        .status-checking { background-color: #f59e0b; animation: pulse 1s infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white min-h-screen">
-    <div class="container mx-auto px-4 py-8 max-w-4xl">
+    <div class="container mx-auto px-4 py-8 max-w-5xl">
         <header class="text-center mb-8">
             <h1 class="text-4xl font-bold mb-2 bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
                 SoraDeno
             </h1>
-            <p class="text-gray-400">OpenAI 兼容的文本生视频 API</p>
+            <p class="text-gray-400">Sora2mb API 代理服务</p>
         </header>
 
+        <!-- API Status Section -->
+        <div class="bg-gray-800 rounded-lg p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4">🔌 API 状态</h2>
+            <div class="grid md:grid-cols-2 gap-6">
+                <!-- Backend API Status -->
+                <div class="bg-gray-700 rounded-lg p-4">
+                    <h3 class="font-medium mb-3">后端 API (Sora2mb)</h3>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">地址:</span>
+                            <a href="https://iyougame-soarmb.hf.space" target="_blank" class="text-blue-400 hover:underline truncate ml-2">
+                                iyougame-soarmb.hf.space
+                            </a>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-400">状态:</span>
+                            <span id="backendStatus" class="flex items-center">
+                                <span class="status-dot status-checking"></span>
+                                <span>检测中...</span>
+                            </span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">响应时间:</span>
+                            <span id="backendLatency">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Local Proxy Status -->
+                <div class="bg-gray-700 rounded-lg p-4">
+                    <h3 class="font-medium mb-3">本地代理 (SoraDeno)</h3>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">地址:</span>
+                            <span id="proxyUrl" class="text-blue-400 truncate ml-2"></span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-400">状态:</span>
+                            <span id="proxyStatus" class="flex items-center">
+                                <span class="status-dot status-checking"></span>
+                                <span>检测中...</span>
+                            </span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">检测时间:</span>
+                            <span id="checkTime">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <button id="refreshStatus" onclick="checkAllStatus()" class="mt-4 bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded text-sm transition-colors">
+                🔄 刷新状态
+            </button>
+        </div>
+
+        <!-- Available Models Section -->
+        <div class="bg-gray-800 rounded-lg p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4">🎨 可用模型</h2>
+            <div class="grid md:grid-cols-2 gap-6">
+                <!-- Image Models -->
+                <div>
+                    <h3 class="font-medium mb-3 text-green-400">🖼️ 图片模型</h3>
+                    <div id="imageModels" class="space-y-2">
+                        <div class="text-gray-400 text-sm">加载中...</div>
+                    </div>
+                </div>
+                <!-- Video Models -->
+                <div>
+                    <h3 class="font-medium mb-3 text-purple-400">🎬 视频模型</h3>
+                    <div id="videoModels" class="space-y-2">
+                        <div class="text-gray-400 text-sm">加载中...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Generation Form -->
         <div class="grid md:grid-cols-2 gap-8">
-            <!-- Video Generation Form -->
             <div class="bg-gray-800 rounded-lg p-6">
-                <h2 class="text-xl font-semibold mb-4">🎬 生成视频</h2>
-                <form id="videoForm" class="space-y-4">
+                <h2 class="text-xl font-semibold mb-4">🎬 生成内容</h2>
+                <form id="generateForm" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-2">模型</label>
+                        <select id="model" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">加载中...</option>
+                        </select>
+                    </div>
+
                     <div>
                         <label class="block text-sm font-medium mb-2">提示词 (Prompt)</label>
                         <textarea
                             id="prompt"
                             rows="4"
                             class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            placeholder="描述你想要生成的视频内容..."
+                            placeholder="描述你想要生成的内容..."
                             required
                         ></textarea>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium mb-2">分辨率</label>
-                            <select id="size" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                <option value="1920x1080">1920x1080 (Full HD)</option>
-                                <option value="1280x720">1280x720 (HD)</option>
-                                <option value="854x480">854x480 (SD)</option>
-                            </select>
-                        </div>
-
-                        <div>
-                            <label class="block text-sm font-medium mb-2">时长 (秒)</label>
-                            <select id="duration" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                <option value="5">5 秒</option>
-                                <option value="10">10 秒</option>
-                                <option value="15">15 秒</option>
-                                <option value="30">30 秒</option>
-                            </select>
-                        </div>
                     </div>
 
                     <button
@@ -71,7 +148,7 @@
                         id="generateBtn"
                         class="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-md font-medium transition-colors flex items-center justify-center gap-2"
                     >
-                        <span>🎬 生成视频</span>
+                        <span>🚀 开始生成</span>
                     </button>
                 </form>
             </div>
@@ -87,140 +164,232 @@
             </div>
         </div>
 
-        <!-- Recent Videos -->
+        <!-- API Usage Example -->
         <div class="mt-8 bg-gray-800 rounded-lg p-6">
-            <h2 class="text-xl font-semibold mb-4">📚 最近生成</h2>
-            <div id="recentVideos" class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <!-- Videos will be loaded here -->
+            <h2 class="text-xl font-semibold mb-4">📖 API 使用示例</h2>
+            <div class="bg-gray-900 rounded p-4 overflow-x-auto">
+                <pre id="apiExample" class="text-sm text-green-400"><code>curl -X POST "<span id="exampleUrl"></span>/v1/chat/completions" \
+  -H "Authorization: Bearer han1234" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "sora-video-landscape-10s",
+    "messages": [{"role": "user", "content": "一只小猫在草地上奔跑"}],
+    "stream": true
+  }'</code></pre>
             </div>
+            <button onclick="copyApiExample()" class="mt-3 bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded text-sm transition-colors">
+                📋 复制示例
+            </button>
         </div>
+
+        <!-- Footer -->
+        <footer class="mt-8 text-center text-gray-500 text-sm">
+            <p>Powered by <a href="https://github.com/iudd/Sora2mb" target="_blank" class="text-blue-400 hover:underline">Sora2mb</a> | 
+            <a href="https://github.com/iudd/soradeno" target="_blank" class="text-blue-400 hover:underline">SoraDeno</a></p>
+        </footer>
     </div>
 
     <script>
         const API_BASE = window.location.origin;
-        let generatedVideos = [];
+        const BACKEND_API = 'https://iyougame-soarmb.hf.space';
 
-        // Load recent videos on page load
-        window.addEventListener('DOMContentLoaded', loadRecentVideos);
+        // Initialize
+        window.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('proxyUrl').textContent = API_BASE;
+            document.getElementById('exampleUrl').textContent = API_BASE;
+            checkAllStatus();
+            loadModels();
+        });
+
+        // Check all API status
+        async function checkAllStatus() {
+            checkBackendStatus();
+            checkProxyStatus();
+        }
+
+        // Check backend API status
+        async function checkBackendStatus() {
+            const statusEl = document.getElementById('backendStatus');
+            const latencyEl = document.getElementById('backendLatency');
+            
+            statusEl.innerHTML = '<span class="status-dot status-checking"></span><span>检测中...</span>';
+            
+            const startTime = Date.now();
+            try {
+                const response = await fetch(`${BACKEND_API}/`, {
+                    method: 'GET',
+                    mode: 'no-cors' // HF Spaces may have CORS issues
+                });
+                const latency = Date.now() - startTime;
+                
+                // no-cors mode always returns opaque response, so we assume success if no error
+                statusEl.innerHTML = '<span class="status-dot status-online"></span><span class="text-green-400">在线</span>';
+                latencyEl.textContent = `${latency}ms`;
+            } catch (error) {
+                statusEl.innerHTML = '<span class="status-dot status-offline"></span><span class="text-red-400">离线</span>';
+                latencyEl.textContent = '-';
+            }
+        }
+
+        // Check local proxy status
+        async function checkProxyStatus() {
+            const statusEl = document.getElementById('proxyStatus');
+            const timeEl = document.getElementById('checkTime');
+            
+            statusEl.innerHTML = '<span class="status-dot status-checking"></span><span>检测中...</span>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const data = await response.json();
+                
+                if (response.ok && data.status === 'ok') {
+                    statusEl.innerHTML = '<span class="status-dot status-online"></span><span class="text-green-400">在线</span>';
+                } else {
+                    statusEl.innerHTML = '<span class="status-dot status-offline"></span><span class="text-red-400">异常</span>';
+                }
+                timeEl.textContent = new Date().toLocaleTimeString();
+            } catch (error) {
+                statusEl.innerHTML = '<span class="status-dot status-offline"></span><span class="text-red-400">离线</span>';
+                timeEl.textContent = new Date().toLocaleTimeString();
+            }
+        }
+
+        // Load available models
+        async function loadModels() {
+            const imageModelsEl = document.getElementById('imageModels');
+            const videoModelsEl = document.getElementById('videoModels');
+            const modelSelect = document.getElementById('model');
+
+            // Define models based on Sora2mb documentation
+            const models = {
+                image: [
+                    { id: 'sora-image', name: '默认', size: '360×360' },
+                    { id: 'sora-image-landscape', name: '横屏', size: '540×360' },
+                    { id: 'sora-image-portrait', name: '竖屏', size: '360×540' },
+                ],
+                video: [
+                    { id: 'sora-video-10s', name: '10秒', duration: '10s' },
+                    { id: 'sora-video-15s', name: '15秒', duration: '15s' },
+                    { id: 'sora-video-landscape-10s', name: '横屏 10秒', duration: '10s' },
+                    { id: 'sora-video-landscape-15s', name: '横屏 15秒', duration: '15s' },
+                    { id: 'sora-video-portrait-10s', name: '竖屏 10秒', duration: '10s' },
+                    { id: 'sora-video-portrait-15s', name: '竖屏 15秒', duration: '15s' },
+                ],
+            };
+
+            // Render image models
+            imageModelsEl.innerHTML = models.image.map(m => `
+                <div class="bg-gray-600 rounded px-3 py-2 text-sm flex justify-between">
+                    <span class="font-mono">${m.id}</span>
+                    <span class="text-gray-400">${m.size}</span>
+                </div>
+            `).join('');
+
+            // Render video models
+            videoModelsEl.innerHTML = models.video.map(m => `
+                <div class="bg-gray-600 rounded px-3 py-2 text-sm flex justify-between">
+                    <span class="font-mono">${m.id}</span>
+                    <span class="text-gray-400">${m.duration}</span>
+                </div>
+            `).join('');
+
+            // Populate model select
+            modelSelect.innerHTML = `
+                <optgroup label="🖼️ 图片模型">
+                    ${models.image.map(m => `<option value="${m.id}">${m.id} (${m.size})</option>`).join('')}
+                </optgroup>
+                <optgroup label="🎬 视频模型">
+                    ${models.video.map(m => `<option value="${m.id}">${m.id} (${m.duration})</option>`).join('')}
+                </optgroup>
+            `;
+            modelSelect.value = 'sora-video-landscape-10s';
+        }
 
         // Handle form submission
-        document.getElementById('videoForm').addEventListener('submit', async (e) => {
+        document.getElementById('generateForm').addEventListener('submit', async (e) => {
             e.preventDefault();
 
+            const model = document.getElementById('model').value;
             const prompt = document.getElementById('prompt').value;
-            const size = document.getElementById('size').value;
-            const duration = document.getElementById('duration').value;
-
             const generateBtn = document.getElementById('generateBtn');
-            const originalText = generateBtn.innerHTML;
+            const resultsDiv = document.getElementById('results');
+
             generateBtn.disabled = true;
             generateBtn.innerHTML = '<div class="loading-spinner"></div><span>生成中...</span>';
+            resultsDiv.innerHTML = '<div class="text-yellow-400">⏳ 正在生成，请稍候...</div>';
 
             try {
-                const response = await fetch(`${API_BASE}/v1/videos/generations`, {
+                const response = await fetch(`${API_BASE}/v1/chat/completions`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'Authorization': 'Bearer han1234',
                     },
                     body: JSON.stringify({
-                        prompt,
-                        model: 'sora',
-                        size,
-                        duration: parseInt(duration)
-                    })
+                        model: model,
+                        messages: [{ role: 'user', content: prompt }],
+                        stream: true,
+                    }),
                 });
 
-                const data = await response.json();
-
-                if (response.ok) {
-                    displayResult(data);
-                    loadRecentVideos();
-                } else {
-                    alert('生成失败: ' + data.error?.message);
+                if (!response.ok) {
+                    const error = await response.text();
+                    throw new Error(error);
                 }
+
+                // Handle streaming response
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let fullContent = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = line.slice(6);
+                            if (data === '[DONE]') continue;
+                            try {
+                                const parsed = JSON.parse(data);
+                                const content = parsed.choices?.[0]?.delta?.content || '';
+                                fullContent += content;
+                                resultsDiv.innerHTML = `<div class="text-green-400 whitespace-pre-wrap">${fullContent}</div>`;
+                            } catch (e) {
+                                // Skip invalid JSON
+                            }
+                        }
+                    }
+                }
+
+                if (!fullContent) {
+                    resultsDiv.innerHTML = '<div class="text-yellow-400">生成完成，但没有返回内容</div>';
+                }
+
             } catch (error) {
                 console.error('Error:', error);
-                alert('网络错误，请重试');
+                resultsDiv.innerHTML = `<div class="text-red-400">❌ 生成失败: ${error.message}</div>`;
             } finally {
                 generateBtn.disabled = false;
-                generateBtn.innerHTML = originalText;
+                generateBtn.innerHTML = '<span>🚀 开始生成</span>';
             }
         });
 
-        // Display generation result
-        function displayResult(data) {
-            const resultsDiv = document.getElementById('results');
-            const video = data.data[0];
-
-            resultsDiv.innerHTML = `
-                <div class="bg-green-900 border border-green-700 rounded-lg p-4">
-                    <h3 class="font-semibold text-green-400 mb-2">✅ 生成成功</h3>
-                    <p class="text-sm text-gray-300 mb-3">${video.revised_prompt}</p>
-                    <div class="flex gap-2">
-                        <a href="${video.url}" target="_blank" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-sm transition-colors">
-                            📺 查看视频
-                        </a>
-                        <button onclick="copyUrl('${video.url}')" class="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded text-sm transition-colors">
-                            📋 复制链接
-                        </button>
-                    </div>
-                </div>
-            `;
-
-            generatedVideos.unshift(data);
-        }
-
-        // Load recent videos
-        async function loadRecentVideos() {
-            try {
-                // In a real implementation, you'd have an endpoint to get recent videos
-                // For now, we'll show the current generated videos
-                const recentDiv = document.getElementById('recentVideos');
-                recentDiv.innerHTML = generatedVideos.slice(0, 6).map(video => {
-                    const videoData = video.data[0];
-                    return `
-                        <div class="bg-gray-700 rounded-lg p-3">
-                            <p class="text-sm text-gray-300 mb-2 line-clamp-2">${videoData.revised_prompt}</p>
-                            <div class="flex gap-2">
-                                <a href="${videoData.url}" target="_blank" class="text-blue-400 hover:text-blue-300 text-sm">查看</a>
-                                <button onclick="copyUrl('${videoData.url}')" class="text-gray-400 hover:text-gray-300 text-sm">复制</button>
-                            </div>
-                        </div>
-                    `;
-                }).join('') || '<div class="text-gray-400 text-center py-8 col-span-full">暂无历史记录</div>';
-            } catch (error) {
-                console.error('Error loading recent videos:', error);
-            }
-        }
-
-        // Copy URL to clipboard
-        function copyUrl(url) {
-            navigator.clipboard.writeText(url).then(() => {
-                // Simple feedback
+        // Copy API example
+        function copyApiExample() {
+            const example = document.getElementById('apiExample').textContent;
+            navigator.clipboard.writeText(example).then(() => {
                 const btn = event.target;
                 const originalText = btn.textContent;
-                btn.textContent = '已复制!';
+                btn.textContent = '✅ 已复制!';
                 setTimeout(() => {
                     btn.textContent = originalText;
-                }, 1000);
+                }, 1500);
             });
         }
-
-        // Test API connection
-        async function testConnection() {
-            try {
-                const response = await fetch(`${API_BASE}/health`);
-                if (response.ok) {
-                    console.log('✅ API 连接正常');
-                } else {
-                    console.log('❌ API 连接失败');
-                }
-            } catch (error) {
-                console.log('❌ API 连接错误:', error);
-            }
-        }
-
-        testConnection();
     </script>
 </body>
 </html>

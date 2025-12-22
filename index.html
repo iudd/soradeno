@@ -118,68 +118,67 @@
                     </div>
                 </div>
             </div>
-        </div>
-
-        <!-- Generation Form -->
-        <div class="grid md:grid-cols-2 gap-8">
-            <div class="bg-gray-800 rounded-lg p-6">
-                <h2 class="text-xl font-semibold mb-4">🎬 生成内容</h2>
-                <form id="generateForm" class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium mb-2">模型</label>
-                        <select id="model" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <option value="">加载中...</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label class="block text-sm font-medium mb-2">提示词 (Prompt)</label>
-                        <textarea
-                            id="prompt"
-                            rows="4"
-                            class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            placeholder="描述你想要生成的内容..."
-                            required
-                        ></textarea>
-                    </div>
-
-                    <button
-                        type="submit"
-                        id="generateBtn"
-                        class="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-md font-medium transition-colors flex items-center justify-center gap-2"
-                    >
-                        <span>🚀 开始生成</span>
-                    </button>
-                </form>
-            </div>
-
-            <!-- Results -->
-            <div class="bg-gray-800 rounded-lg p-6">
-                <h2 class="text-xl font-semibold mb-4">📺 生成结果</h2>
-                <div id="results" class="space-y-4">
-                    <div class="text-gray-400 text-center py-8">
-                        暂无生成结果
-                    </div>
+            
+            <!-- Features -->
+            <div class="mt-6 pt-4 border-t border-gray-700">
+                <h3 class="font-medium mb-3 text-yellow-400">✨ 支持的功能</h3>
+                <div class="grid md:grid-cols-3 gap-2 text-sm text-gray-300">
+                    <div>• 文生图 / 图生图</div>
+                    <div>• 文生视频 / 图生视频</div>
+                    <div>• 视频角色功能</div>
+                    <div>• Remix 视频创作</div>
+                    <div>• 分镜视频生成</div>
+                    <div>• 流式响应</div>
                 </div>
             </div>
         </div>
 
-        <!-- API Usage Example -->
-        <div class="mt-8 bg-gray-800 rounded-lg p-6">
-            <h2 class="text-xl font-semibold mb-4">📖 API 使用示例</h2>
-            <div class="bg-gray-900 rounded p-4 overflow-x-auto">
-                <pre id="apiExample" class="text-sm text-green-400"><code>curl -X POST "<span id="exampleUrl"></span>/v1/chat/completions" \
-  -H "Authorization: Bearer han1234" \
+        <!-- API Info Section -->
+        <div class="bg-gray-800 rounded-lg p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4">📖 API 使用说明</h2>
+            
+            <div class="space-y-4">
+                <!-- Endpoint Info -->
+                <div class="bg-gray-700 rounded p-4">
+                    <h3 class="font-medium mb-2">端点信息</h3>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex flex-wrap gap-2">
+                            <span class="text-gray-400">Chat Completions:</span>
+                            <code id="chatEndpoint" class="bg-gray-600 px-2 py-1 rounded text-green-400"></code>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <span class="text-gray-400">Models:</span>
+                            <code id="modelsEndpoint" class="bg-gray-600 px-2 py-1 rounded text-green-400"></code>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Example -->
+                <div class="bg-gray-900 rounded p-4 overflow-x-auto">
+                    <h3 class="font-medium mb-2 text-gray-300">请求示例</h3>
+                    <pre id="apiExample" class="text-sm text-green-400"><code>curl -X POST "<span id="exampleUrl"></span>/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "sora-video-landscape-10s",
     "messages": [{"role": "user", "content": "一只小猫在草地上奔跑"}],
     "stream": true
   }'</code></pre>
+                </div>
+                <button onclick="copyApiExample()" class="bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded text-sm transition-colors">
+                    📋 复制示例
+                </button>
+                
+                <!-- Note -->
+                <div class="bg-yellow-900/30 border border-yellow-700 rounded p-4 text-sm">
+                    <p class="text-yellow-400 font-medium mb-1">⚠️ 注意事项</p>
+                    <ul class="text-yellow-200 space-y-1">
+                        <li>• 此代理服务需要后端 Sora2mb 有可用的 Sora Token</li>
+                        <li>• 如果出现 503 错误，说明后端暂无可用凭证</li>
+                        <li>• API Key 由服务端配置，无需在请求中提供</li>
+                        <li>• 建议使用流式模式 (stream: true)</li>
+                    </ul>
+                </div>
             </div>
-            <button onclick="copyApiExample()" class="mt-3 bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded text-sm transition-colors">
-                📋 复制示例
-            </button>
         </div>
 
         <!-- Footer -->
@@ -197,6 +196,8 @@
         window.addEventListener('DOMContentLoaded', () => {
             document.getElementById('proxyUrl').textContent = API_BASE;
             document.getElementById('exampleUrl').textContent = API_BASE;
+            document.getElementById('chatEndpoint').textContent = `${API_BASE}/v1/chat/completions`;
+            document.getElementById('modelsEndpoint').textContent = `${API_BASE}/v1/models`;
             checkAllStatus();
             loadModels();
         });
@@ -218,11 +219,10 @@
             try {
                 const response = await fetch(`${BACKEND_API}/`, {
                     method: 'GET',
-                    mode: 'no-cors' // HF Spaces may have CORS issues
+                    mode: 'no-cors'
                 });
                 const latency = Date.now() - startTime;
                 
-                // no-cors mode always returns opaque response, so we assume success if no error
                 statusEl.innerHTML = '<span class="status-dot status-online"></span><span class="text-green-400">在线</span>';
                 latencyEl.textContent = `${latency}ms`;
             } catch (error) {
@@ -258,9 +258,7 @@
         async function loadModels() {
             const imageModelsEl = document.getElementById('imageModels');
             const videoModelsEl = document.getElementById('videoModels');
-            const modelSelect = document.getElementById('model');
 
-            // Define models based on Sora2mb documentation
             const models = {
                 image: [
                     { id: 'sora-image', name: '默认', size: '360×360' },
@@ -277,7 +275,6 @@
                 ],
             };
 
-            // Render image models
             imageModelsEl.innerHTML = models.image.map(m => `
                 <div class="bg-gray-600 rounded px-3 py-2 text-sm flex justify-between">
                     <span class="font-mono">${m.id}</span>
@@ -285,98 +282,13 @@
                 </div>
             `).join('');
 
-            // Render video models
             videoModelsEl.innerHTML = models.video.map(m => `
                 <div class="bg-gray-600 rounded px-3 py-2 text-sm flex justify-between">
                     <span class="font-mono">${m.id}</span>
                     <span class="text-gray-400">${m.duration}</span>
                 </div>
             `).join('');
-
-            // Populate model select
-            modelSelect.innerHTML = `
-                <optgroup label="🖼️ 图片模型">
-                    ${models.image.map(m => `<option value="${m.id}">${m.id} (${m.size})</option>`).join('')}
-                </optgroup>
-                <optgroup label="🎬 视频模型">
-                    ${models.video.map(m => `<option value="${m.id}">${m.id} (${m.duration})</option>`).join('')}
-                </optgroup>
-            `;
-            modelSelect.value = 'sora-video-landscape-10s';
         }
-
-        // Handle form submission
-        document.getElementById('generateForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            const model = document.getElementById('model').value;
-            const prompt = document.getElementById('prompt').value;
-            const generateBtn = document.getElementById('generateBtn');
-            const resultsDiv = document.getElementById('results');
-
-            generateBtn.disabled = true;
-            generateBtn.innerHTML = '<div class="loading-spinner"></div><span>生成中...</span>';
-            resultsDiv.innerHTML = '<div class="text-yellow-400">⏳ 正在生成，请稍候...</div>';
-
-            try {
-                const response = await fetch(`${API_BASE}/v1/chat/completions`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer han1234',
-                    },
-                    body: JSON.stringify({
-                        model: model,
-                        messages: [{ role: 'user', content: prompt }],
-                        stream: true,
-                    }),
-                });
-
-                if (!response.ok) {
-                    const error = await response.text();
-                    throw new Error(error);
-                }
-
-                // Handle streaming response
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-                let fullContent = '';
-
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-
-                    const chunk = decoder.decode(value);
-                    const lines = chunk.split('\n');
-
-                    for (const line of lines) {
-                        if (line.startsWith('data: ')) {
-                            const data = line.slice(6);
-                            if (data === '[DONE]') continue;
-                            try {
-                                const parsed = JSON.parse(data);
-                                const content = parsed.choices?.[0]?.delta?.content || '';
-                                fullContent += content;
-                                resultsDiv.innerHTML = `<div class="text-green-400 whitespace-pre-wrap">${fullContent}</div>`;
-                            } catch (e) {
-                                // Skip invalid JSON
-                            }
-                        }
-                    }
-                }
-
-                if (!fullContent) {
-                    resultsDiv.innerHTML = '<div class="text-yellow-400">生成完成，但没有返回内容</div>';
-                }
-
-            } catch (error) {
-                console.error('Error:', error);
-                resultsDiv.innerHTML = `<div class="text-red-400">❌ 生成失败: ${error.message}</div>`;
-            } finally {
-                generateBtn.disabled = false;
-                generateBtn.innerHTML = '<span>🚀 开始生成</span>';
-            }
-        });
 
         // Copy API example
         function copyApiExample() {

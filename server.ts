@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
+import { FeishuService } from "./feishu.ts";
 
 // Ensure API_BASE_URL always ends with /v1
 let API_BASE_URL = Deno.env.get("API_BASE_URL") || "https://iyougame-soarmb.hf.space/v1";
@@ -10,6 +11,9 @@ if (!API_BASE_URL.endsWith("/v1")) {
 }
 
 const API_KEY = Deno.env.get("API_KEY") || "han1234";
+
+// Initialize Feishu service
+const feishuService = new FeishuService();
 
 // Logging helper
 function log(level: string, message: string, data?: any) {
@@ -176,6 +180,186 @@ async function handler(req: Request): Promise<Response> {
           "Content-Type": "application/json",
         },
       });
+    }
+
+    // Feishu API endpoints
+    // 获取飞书配置状态
+    if (url.pathname === "/api/feishu/status" && req.method === "GET") {
+      log("INFO", `[${requestId}] Feishu status check`);
+      return new Response(JSON.stringify({
+        configured: feishuService.isConfigured(),
+        message: feishuService.isConfigured() ? "飞书已配置" : "飞书未配置，请设置环境变量"
+      }), {
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Content-Type": "application/json",
+        },
+      });
+    }
+
+    // 获取待生成任务列表
+    if (url.pathname === "/api/feishu/tasks" && req.method === "GET") {
+      log("INFO", `[${requestId}] Fetching Feishu tasks`);
+
+      if (!feishuService.isConfigured()) {
+        return new Response(JSON.stringify({
+          error: "飞书未配置"
+        }), {
+          status: 400,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Content-Type": "application/json",
+          },
+        });
+      }
+
+      try {
+        const tasks = await feishuService.getPendingTasks();
+        const parsedTasks = tasks.map(task => feishuService.parseTaskRecord(task));
+
+        log("INFO", `[${requestId}] Found ${parsedTasks.length} pending tasks`);
+
+        return new Response(JSON.stringify({
+          tasks: parsedTasks,
+          count: parsedTasks.length
+        }), {
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Content-Type": "application/json",
+          },
+        });
+      } catch (error) {
+        log("ERROR", `[${requestId}] Failed to fetch tasks`, {
+          error: error instanceof Error ? error.message : String(error)
+        });
+        return new Response(JSON.stringify({
+          error: error instanceof Error ? error.message : "获取任务失败"
+        }), {
+          status: 500,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Content-Type": "application/json",
+          },
+        });
+      }
+    }
+
+    // 生成单个视频
+    if (url.pathname.startsWith("/api/feishu/generate/") && req.method === "POST") {
+      const recordId = url.pathname.split("/").pop();
+      log("INFO", `[${requestId}] Generating video for task ${recordId}`);
+
+      if (!feishuService.isConfigured()) {
+        return new Response(JSON.stringify({
+          error: "飞书未配置"
+        }), {
+          status: 400,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Content-Type": "application/json",
+          },
+        });
+      }
+
+      try {
+        // 获取任务详情
+        const task = await feishuService.getTask(recordId!);
+        const parsedTask = feishuService.parseTaskRecord(task);
+
+        // 更新状态为"生成中"
+        await feishuService.updateTaskStatus(recordId!, "生成中");
+
+        // 调用 Sora API 生成视频
+        const messages = [{ role: "user", content: parsedTask.prompt }];
+        const response = await fetch(`${API_BASE_URL}/chat/completions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: parsedTask.model,
+            messages: messages,
+            stream: true
+          }),
+        });
+
+        if (!response.ok) {
+          const error = await response.text();
+          await feishuService.updateTaskStatus(recordId!, "失败", undefined, error);
+          throw new Error(error);
+        }
+
+        // 解析流式响应获取视频 URL
+        const reader = response.body!.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let videoUrl = null;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              if (data === '[DONE]') continue;
+
+              try {
+                const json = JSON.parse(data);
+                const content = json.choices?.[0]?.delta?.content || '';
+
+                if (content) {
+                  const urlMatch = content.match(/https?:\/\/[^\s\)]+/);
+                  if (urlMatch) {
+                    videoUrl = urlMatch[0];
+                  }
+                }
+              } catch (e) {
+                // Ignore parse errors
+              }
+            }
+          }
+        }
+
+        if (videoUrl) {
+          // 更新状态为"成功"
+          await feishuService.updateTaskStatus(recordId!, "成功", videoUrl);
+
+          log("INFO", `[${requestId}] Video generated successfully`, { videoUrl });
+
+          return new Response(JSON.stringify({
+            success: true,
+            videoUrl: videoUrl,
+            task: parsedTask
+          }), {
+            headers: {
+              "Access-Control-Allow-Origin": "*",
+              "Content-Type": "application/json",
+            },
+          });
+        } else {
+          await feishuService.updateTaskStatus(recordId!, "失败", undefined, "未能提取视频URL");
+          throw new Error("未能提取视频URL");
+        }
+      } catch (error) {
+        log("ERROR", `[${requestId}] Failed to generate video`, {
+          error: error instanceof Error ? error.message : String(error)
+        });
+        return new Response(JSON.stringify({
+          error: error instanceof Error ? error.message : "生成失败"
+        }), {
+          status: 500,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Content-Type": "application/json",
+          },
+        });
+      }
     }
 
     log("WARN", `[${requestId}] Route not found: ${url.pathname}`);

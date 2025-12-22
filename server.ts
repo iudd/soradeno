@@ -1,6 +1,14 @@
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 
-const API_BASE_URL = Deno.env.get("API_BASE_URL") || "https://iyougame-soarmb.hf.space/v1";
+// Ensure API_BASE_URL always ends with /v1
+let API_BASE_URL = Deno.env.get("API_BASE_URL") || "https://iyougame-soarmb.hf.space/v1";
+// Remove trailing slash if present
+API_BASE_URL = API_BASE_URL.replace(/\/$/, "");
+// Ensure /v1 suffix
+if (!API_BASE_URL.endsWith("/v1")) {
+  API_BASE_URL = `${API_BASE_URL}/v1`;
+}
+
 const API_KEY = Deno.env.get("API_KEY") || "han1234";
 
 // Logging helper
@@ -198,13 +206,25 @@ async function handler(req: Request): Promise<Response> {
 }
 
 const port = parseInt(Deno.env.get("PORT") || "8000");
+const rawApiUrl = Deno.env.get("API_BASE_URL");
+
 log("INFO", "=".repeat(60));
 log("INFO", "🚀 SoraDeno Server Starting");
 log("INFO", "=".repeat(60));
 log("INFO", `Server running on port ${port}`);
-log("INFO", `API Base URL: ${API_BASE_URL}`);
+log("INFO", `API Base URL (raw): ${rawApiUrl || "not set (using default)"}`);
+log("INFO", `API Base URL (processed): ${API_BASE_URL}`);
 log("INFO", `API Key configured: ${API_KEY ? "Yes (length: " + API_KEY.length + ")" : "No"}`);
 log("INFO", `Environment: ${Deno.env.get("DENO_DEPLOYMENT_ID") ? "Deno Deploy" : "Local"}`);
+
+// Validate URL
+if (!API_BASE_URL.endsWith("/v1")) {
+  log("WARN", "⚠️  API_BASE_URL does not end with /v1, this may cause issues!");
+}
+if (!API_BASE_URL.startsWith("http")) {
+  log("ERROR", "❌ API_BASE_URL does not start with http/https!");
+}
+
 log("INFO", "=".repeat(60));
 
 serve(handler, { port });

@@ -3,6 +3,9 @@ import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 const API_BASE_URL = Deno.env.get("API_BASE_URL") || "https://iyougame-soarmb.hf.space/v1";
 const API_KEY = Deno.env.get("API_KEY") || "han1234";
 
+// Read index.html content
+const indexHtml = await Deno.readTextFile("./index.html");
+
 async function handler(req: Request): Promise<Response> {
   const url = new URL(req.url);
 
@@ -18,6 +21,29 @@ async function handler(req: Request): Promise<Response> {
   }
 
   try {
+    // Serve index.html for root path
+    if (url.pathname === "/" && req.method === "GET") {
+      return new Response(indexHtml, {
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+        },
+      });
+    }
+
+    // Health check endpoint
+    if (url.pathname === "/health" && req.method === "GET") {
+      return new Response(JSON.stringify({
+        status: "ok",
+        api_base: API_BASE_URL,
+        timestamp: new Date().toISOString(),
+      }), {
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Content-Type": "application/json",
+        },
+      });
+    }
+
     // Chat completions endpoint - proxy to Sora2mb API
     if (url.pathname === "/v1/chat/completions" && req.method === "POST") {
       const body = await req.json();
@@ -89,20 +115,6 @@ async function handler(req: Request): Promise<Response> {
         ],
       };
       return new Response(JSON.stringify(models), {
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Content-Type": "application/json",
-        },
-      });
-    }
-
-    // Health check endpoint
-    if (url.pathname === "/" || url.pathname === "/health") {
-      return new Response(JSON.stringify({
-        status: "ok",
-        api_base: API_BASE_URL,
-        timestamp: new Date().toISOString(),
-      }), {
         headers: {
           "Access-Control-Allow-Origin": "*",
           "Content-Type": "application/json",

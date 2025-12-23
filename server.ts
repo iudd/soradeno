@@ -361,8 +361,11 @@ app.use(async (ctx) => {
     
     // Replace API_BASE with environment variable or fallback to current origin
     const apiUrl = Deno.env.get("API_BASE_URL") || `https://${ctx.request.url.host}`;
+    console.log(`Injecting API_BASE: ${apiUrl}`);
+    
+    // Use a more flexible replacement to handle whitespace variations
     indexHtml = indexHtml.replace(
-      "const API_BASE = window.location.origin;",
+      /const API_BASE = window\.location\.origin;/g,
       `const API_BASE = "${apiUrl}";`
     );
     

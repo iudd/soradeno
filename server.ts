@@ -221,11 +221,29 @@ async function callVideoGenerationAPI(task: any) {
 app.use(router.routes());
 app.use(router.allowedMethods());
 
-// Default route - serve static files
+// Default route - serve index.html with API_BASE injection
 app.use(async (ctx) => {
-  await send(ctx, ctx.request.url.pathname, {
-    root: `${Deno.cwd()}`,
-  });
+  const { pathname } = ctx.request.url;
+  
+  // Inject API_BASE into index.html
+  if (pathname === "/" || pathname === "") {
+    let indexHtml = await Deno.readTextFile(`${Deno.cwd()}/index.html`);
+    
+    // Replace API_BASE with environment variable or fallback to current origin
+    const apiUrl = Deno.env.get("API_BASE_URL") || `https://${ctx.request.url.host}`;
+    indexHtml = indexHtml.replace(
+      "const API_BASE = window.location.origin;",
+      `const API_BASE = "${apiUrl}";`
+    );
+    
+    ctx.response.body = indexHtml;
+    ctx.response.type = "text/html";
+  } else {
+    // Serve other static files normally
+    await send(ctx, pathname, {
+      root: `${Deno.cwd()}`,
+    });
+  }
 });
 
 // Start the server

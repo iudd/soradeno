@@ -16,10 +16,10 @@ const API_KEY = Deno.env.get("API_KEY") || "han1234";
 const feishuService = new FeishuService();
 
 // Logging helper
-function log(level: string, message: string, data?: any) {
+function log(level: string, requestId: string, message: string, data?: any) {
   const timestamp = new Date().toISOString();
   const logData = data ? ` | Data: ${JSON.stringify(data)}` : "";
-  console.log(`[${timestamp}] [${level}] ${message}${logData}`);
+  console.log(`[${timestamp}] [${level}] [${requestId}] ${message}${logData}`);
 }
 
 // Read index.html content
@@ -30,14 +30,14 @@ async function handler(req: Request): Promise<Response> {
   const requestId = crypto.randomUUID().slice(0, 8);
 
   // Log incoming request
-  log("INFO", `[${requestId}] ${req.method} ${url.pathname}`, {
+  log("INFO", requestId, `${req.method} ${url.pathname}`, {
     origin: req.headers.get("origin"),
     userAgent: req.headers.get("user-agent")?.slice(0, 50),
   });
 
   // Handle CORS
   if (req.method === "OPTIONS") {
-    log("INFO", `[${requestId}] CORS preflight request`);
+    log("INFO", requestId, "CORS preflight request");
     return new Response(null, {
       headers: {
         "Access-Control-Allow-Origin": "*",
@@ -50,7 +50,7 @@ async function handler(req: Request): Promise<Response> {
   try {
     // Serve index.html for root path
     if (url.pathname === "/" && req.method === "GET") {
-      log("INFO", `[${requestId}] Serving index.html`);
+      log("INFO", requestId, "Serving index.html");
       return new Response(indexHtml, {
         headers: {
           "Content-Type": "text/html; charset=utf-8",
@@ -64,9 +64,10 @@ async function handler(req: Request): Promise<Response> {
         status: "ok",
         api_base: API_BASE_URL,
         api_key_configured: !!API_KEY,
+        feishu_configured: feishuService.isConfigured(),
         timestamp: new Date().toISOString(),
       };
-      log("INFO", `[${requestId}] Health check`, healthData);
+      log("INFO", requestId, "Health check", healthData);
       return new Response(JSON.stringify(healthData), {
         headers: {
           "Access-Control-Allow-Origin": "*",
@@ -80,7 +81,7 @@ async function handler(req: Request): Promise<Response> {
       const body = await req.json();
 
       // Log request details
-      log("INFO", `[${requestId}] Chat completion request`, {
+      log("INFO", requestId, "Chat completion request", {
         model: body.model,
         messageCount: body.messages?.length,
         stream: body.stream,
@@ -93,7 +94,7 @@ async function handler(req: Request): Promise<Response> {
       };
 
       const backendUrl = `${API_BASE_URL}/chat/completions`;
-      log("INFO", `[${requestId}] Calling backend API`, {
+      log("INFO", requestId, "Calling backend API", {
         url: backendUrl,
         hasApiKey: !!API_KEY,
       });
@@ -109,7 +110,7 @@ async function handler(req: Request): Promise<Response> {
       });
 
       const duration = Date.now() - startTime;
-      log("INFO", `[${requestId}] Backend response`, {
+      log("INFO", requestId, "Backend response", {
         status: response.status,
         statusText: response.statusText,
         duration: `${duration}ms`,
@@ -118,7 +119,7 @@ async function handler(req: Request): Promise<Response> {
 
       if (!response.ok) {
         const error = await response.text();
-        log("ERROR", `[${requestId}] Backend API error`, {
+        log("ERROR", requestId, "Backend API error", {
           status: response.status,
           error: error.slice(0, 500),
         });
@@ -133,7 +134,7 @@ async function handler(req: Request): Promise<Response> {
 
       // Handle streaming response
       if (requestBody.stream && response.body) {
-        log("INFO", `[${requestId}] Streaming response started`);
+        log("INFO", requestId, "Streaming response started");
         return new Response(response.body, {
           headers: {
             "Access-Control-Allow-Origin": "*",
@@ -145,7 +146,7 @@ async function handler(req: Request): Promise<Response> {
       }
 
       const data = await response.json();
-      log("INFO", `[${requestId}] Non-streaming response completed`);
+      log("INFO", requestId, "Non-streaming response completed");
       return new Response(JSON.stringify(data), {
         headers: {
           "Access-Control-Allow-Origin": "*",
@@ -156,7 +157,7 @@ async function handler(req: Request): Promise<Response> {
 
     // Models endpoint
     if (url.pathname === "/v1/models" && req.method === "GET") {
-      log("INFO", `[${requestId}] Models list requested`);
+      log("INFO", requestId, "Models list requested");
       const models = {
         object: "list",
         data: [
@@ -173,7 +174,7 @@ async function handler(req: Request): Promise<Response> {
           { id: "sora-video-portrait-15s", object: "model", owned_by: "sora2mb" },
         ],
       };
-      log("INFO", `[${requestId}] Returning ${models.data.length} models`);
+      log("INFO", requestId, `Returning ${models.data.length} models`);
       return new Response(JSON.stringify(models), {
         headers: {
           "Access-Control-Allow-Origin": "*",
@@ -182,13 +183,16 @@ async function handler(req: Request): Promise<Response> {
       });
     }
 
-    // Feishu API endpoints
-    // 获取飞书配置状态
+    // ==================== Feishu API endpoints ====================
+
+    // 获取飞书配置状态（包含调试信息）
     if (url.pathname === "/api/feishu/status" && req.method === "GET") {
-      log("INFO", `[${requestId}] Feishu status check`);
+      log("INFO", requestId, "Feishu status check");
+      const configStatus = feishuService.getConfigStatus();
       return new Response(JSON.stringify({
         configured: feishuService.isConfigured(),
-        message: feishuService.isConfigured() ? "飞书已配置" : "飞书未配置，请设置环境变量"
+        message: feishuService.isConfigured() ? "飞书已配置" : "飞书未配置，请设置环境变量",
+        debug: configStatus
       }), {
         headers: {
           "Access-Control-Allow-Origin": "*",
@@ -197,13 +201,68 @@ async function handler(req: Request): Promise<Response> {
       });
     }
 
-    // 获取待生成任务列表
-    if (url.pathname === "/api/feishu/tasks" && req.method === "GET") {
-      log("INFO", `[${requestId}] Fetching Feishu tasks`);
+    // 获取所有记录（调试用）
+    if (url.pathname === "/api/feishu/records" && req.method === "GET") {
+      log("INFO", requestId, "Fetching all Feishu records (debug)");
 
       if (!feishuService.isConfigured()) {
         return new Response(JSON.stringify({
-          error: "飞书未配置"
+          error: "飞书未配置",
+          debug: feishuService.getConfigStatus()
+        }), {
+          status: 400,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Content-Type": "application/json",
+          },
+        });
+      }
+
+      try {
+        const records = await feishuService.getAllRecords();
+        const parsedRecords = records.map(record => feishuService.parseTaskRecord(record));
+
+        log("INFO", requestId, `Found ${parsedRecords.length} records`);
+
+        return new Response(JSON.stringify({
+          success: true,
+          count: parsedRecords.length,
+          records: parsedRecords,
+          debug: {
+            message: "这是所有记录，包括已生成和未生成的",
+            firstRecordRaw: records.length > 0 ? records[0] : null
+          }
+        }), {
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Content-Type": "application/json",
+          },
+        });
+      } catch (error) {
+        log("ERROR", requestId, "Failed to fetch records", {
+          error: error instanceof Error ? error.message : String(error)
+        });
+        return new Response(JSON.stringify({
+          error: error instanceof Error ? error.message : "获取记录失败",
+          debug: feishuService.getConfigStatus()
+        }), {
+          status: 500,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Content-Type": "application/json",
+          },
+        });
+      }
+    }
+
+    // 获取待生成任务列表
+    if (url.pathname === "/api/feishu/tasks" && req.method === "GET") {
+      log("INFO", requestId, "Fetching Feishu tasks");
+
+      if (!feishuService.isConfigured()) {
+        return new Response(JSON.stringify({
+          error: "飞书未配置",
+          debug: feishuService.getConfigStatus()
         }), {
           status: 400,
           headers: {
@@ -217,7 +276,7 @@ async function handler(req: Request): Promise<Response> {
         const tasks = await feishuService.getPendingTasks();
         const parsedTasks = tasks.map(task => feishuService.parseTaskRecord(task));
 
-        log("INFO", `[${requestId}] Found ${parsedTasks.length} pending tasks`);
+        log("INFO", requestId, `Found ${parsedTasks.length} pending tasks`);
 
         return new Response(JSON.stringify({
           tasks: parsedTasks,
@@ -229,11 +288,12 @@ async function handler(req: Request): Promise<Response> {
           },
         });
       } catch (error) {
-        log("ERROR", `[${requestId}] Failed to fetch tasks`, {
+        log("ERROR", requestId, "Failed to fetch tasks", {
           error: error instanceof Error ? error.message : String(error)
         });
         return new Response(JSON.stringify({
-          error: error instanceof Error ? error.message : "获取任务失败"
+          error: error instanceof Error ? error.message : "获取任务失败",
+          debug: feishuService.getConfigStatus()
         }), {
           status: 500,
           headers: {
@@ -247,7 +307,7 @@ async function handler(req: Request): Promise<Response> {
     // 生成单个视频
     if (url.pathname.startsWith("/api/feishu/generate/") && req.method === "POST") {
       const recordId = url.pathname.split("/").pop();
-      log("INFO", `[${requestId}] Generating video for task ${recordId}`);
+      log("INFO", requestId, `Generating video for task ${recordId}`);
 
       if (!feishuService.isConfigured()) {
         return new Response(JSON.stringify({
@@ -330,7 +390,7 @@ async function handler(req: Request): Promise<Response> {
           // 更新状态为"成功"
           await feishuService.updateTaskStatus(recordId!, "成功", videoUrl);
 
-          log("INFO", `[${requestId}] Video generated successfully`, { videoUrl });
+          log("INFO", requestId, "Video generated successfully", { videoUrl });
 
           return new Response(JSON.stringify({
             success: true,
@@ -347,7 +407,7 @@ async function handler(req: Request): Promise<Response> {
           throw new Error("未能提取视频URL");
         }
       } catch (error) {
-        log("ERROR", `[${requestId}] Failed to generate video`, {
+        log("ERROR", requestId, "Failed to generate video", {
           error: error instanceof Error ? error.message : String(error)
         });
         return new Response(JSON.stringify({
@@ -362,7 +422,7 @@ async function handler(req: Request): Promise<Response> {
       }
     }
 
-    log("WARN", `[${requestId}] Route not found: ${url.pathname}`);
+    log("WARN", requestId, `Route not found: ${url.pathname}`);
     return new Response(JSON.stringify({ error: "Not found" }), {
       status: 404,
       headers: {
@@ -372,7 +432,7 @@ async function handler(req: Request): Promise<Response> {
     });
 
   } catch (error) {
-    log("ERROR", `[${requestId}] Server error`, {
+    log("ERROR", requestId, "Server error", {
       message: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack?.slice(0, 500) : undefined,
     });
@@ -392,23 +452,24 @@ async function handler(req: Request): Promise<Response> {
 const port = parseInt(Deno.env.get("PORT") || "8000");
 const rawApiUrl = Deno.env.get("API_BASE_URL");
 
-log("INFO", "=".repeat(60));
-log("INFO", "🚀 SoraDeno Server Starting");
-log("INFO", "=".repeat(60));
-log("INFO", `Server running on port ${port}`);
-log("INFO", `API Base URL (raw): ${rawApiUrl || "not set (using default)"}`);
-log("INFO", `API Base URL (processed): ${API_BASE_URL}`);
-log("INFO", `API Key configured: ${API_KEY ? "Yes (length: " + API_KEY.length + ")" : "No"}`);
-log("INFO", `Environment: ${Deno.env.get("DENO_DEPLOYMENT_ID") ? "Deno Deploy" : "Local"}`);
+console.log("=".repeat(60));
+console.log("🚀 SoraDeno Server Starting");
+console.log("=".repeat(60));
+console.log(`Server running on port ${port}`);
+console.log(`API Base URL (raw): ${rawApiUrl || "not set (using default)"}`);
+console.log(`API Base URL (processed): ${API_BASE_URL}`);
+console.log(`API Key configured: ${API_KEY ? "Yes (length: " + API_KEY.length + ")" : "No"}`);
+console.log(`Feishu configured: ${feishuService.isConfigured() ? "Yes" : "No"}`);
+console.log(`Environment: ${Deno.env.get("DENO_DEPLOYMENT_ID") ? "Deno Deploy" : "Local"}`);
 
 // Validate URL
 if (!API_BASE_URL.endsWith("/v1")) {
-  log("WARN", "⚠️  API_BASE_URL does not end with /v1, this may cause issues!");
+  console.log("⚠️  API_BASE_URL does not end with /v1, this may cause issues!");
 }
 if (!API_BASE_URL.startsWith("http")) {
-  log("ERROR", "❌ API_BASE_URL does not start with http/https!");
+  console.log("❌ API_BASE_URL does not start with http/https!");
 }
 
-log("INFO", "=".repeat(60));
+console.log("=".repeat(60));
 
 serve(handler, { port });

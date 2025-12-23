@@ -232,8 +232,8 @@ export class FeishuService {
                     text: "查看图片",
                 };
             }
-            // 使用飞书API期望的日期时间格式
-            fields["生成时间"] = new Date().toISOString();
+            // 使用飞书API期望的Unix时间戳格式
+            fields["生成时间"] = Math.floor(Date.now() / 1000);
         }
 
         if (status === "失败" && error) {

@@ -378,7 +378,13 @@ app.use(async (ctx) => {
 
 // Start the server
 const port = parseInt(Deno.env.get("PORT") || "8000");
+const API_BASE_URL = Deno.env.get("API_BASE_URL");
+const API_KEY = Deno.env.get("API_KEY");
+
 console.log(`Server running on http://localhost:${port}`);
+console.log("API Configuration:");
+console.log(`  - API_BASE_URL: ${API_BASE_URL || "未设置"}`);
+console.log(`  - API_KEY: ${API_KEY ? API_KEY.slice(0, 10) + "..." : "未设置"}`);
 
 await app.listen({ port });
 

@@ -221,11 +221,10 @@ async function callVideoGenerationAPI(task: any) {
 app.use(router.routes());
 app.use(router.allowedMethods());
 
-// Default route - serve index.html
+// Default route - serve static files
 app.use(async (ctx) => {
   await send(ctx, ctx.request.url.pathname, {
     root: `${Deno.cwd()}`,
-    index: "index.html",
   });
 });
 
@@ -237,13 +236,24 @@ await app.listen({ port });
 
 // Helper function to serve static files
 async function send(ctx, pathname, options) {
+  const filePath = pathname === "/" ? "/index.html" : pathname;
+  
   try {
-    await Deno.readFile(options.root + pathname);
-    await sendFile(ctx, pathname, options);
+    const fullPath = options.root + filePath;
+    const fileInfo = await Deno.stat(fullPath);
+    
+    if (fileInfo.isDirectory) {
+      // If it's a directory, try to serve index.html
+      const indexPath = fullPath.endsWith("/") ? fullPath + "index.html" : fullPath + "/index.html";
+      await sendFile(ctx, indexPath, { ...options, isIndexPath: true });
+    } else {
+      // It's a file, serve it directly
+      await sendFile(ctx, fullPath, options);
+    }
   } catch (e) {
     if (e instanceof Deno.errors.NotFound) {
       // Default to index.html for SPA routing
-      await sendFile(ctx, "/index.html", { root: options.root, index: "index.html" });
+      await sendFile(ctx, options.root + "/index.html", { ...options, isIndexPath: true });
     } else {
       throw e;
     }
@@ -251,13 +261,34 @@ async function send(ctx, pathname, options) {
 }
 
 // Function to send a file
-async function sendFile(ctx, pathname, options) {
-  const file = await Deno.open(options.root + pathname);
-  const fileInfo = await Deno.stat(options.root + pathname);
+async function sendFile(ctx, filePath, options) {
+  const fileInfo = await Deno.stat(filePath);
+  const file = await Deno.open(filePath);
   
   ctx.response.body = file.readable;
-  ctx.response.type = getType(pathname);
+  
+  // Set MIME type based on file extension
+  const ext = filePath.split('.').pop();
+  const types = {
+    "html": "text/html",
+    "js": "application/javascript",
+    "css": "text/css",
+    "json": "application/json",
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "gif": "image/gif",
+    "svg": "image/svg+xml",
+    "ico": "image/x-icon"
+  };
+  
+  ctx.response.type = types[ext] || "application/octet-stream";
   ctx.response.headers.set("Content-Length", fileInfo.size.toString());
+  
+  // Add cache control for static assets
+  if (ext !== "html") {
+    ctx.response.headers.set("Cache-Control", "max-age=3600");
+  }
 }
 
 // Function to get MIME type based on file extension

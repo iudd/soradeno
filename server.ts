@@ -121,7 +121,7 @@ router.post("/api/feishu/generate/:recordId", async (ctx) => {
     
     // Get the task details
     const taskRecord = await feishuService.getTask(recordId);
-    const task = feishuService.parseTaskRecord(recordId);
+    const task = feishuService.parseTaskRecord(taskRecord);
     
     // Update status to "生成中"
     await feishuService.updateTaskStatus(recordId, "生成中");

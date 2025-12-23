@@ -232,7 +232,8 @@ export class FeishuService {
                     text: "查看图片",
                 };
             }
-            fields["生成时间"] = Date.now();
+            // 使用飞书API期望的日期时间格式
+            fields["生成时间"] = new Date().toISOString();
         }
 
         if (status === "失败" && error) {
@@ -258,6 +259,7 @@ export class FeishuService {
         const data = await response.json();
 
         if (data.code !== 0) {
+            console.error("[Feishu] 更新任务失败详情:", data);
             throw new Error(`更新任务状态失败: ${data.msg}`);
         }
     }

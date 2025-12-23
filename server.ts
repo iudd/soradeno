@@ -182,39 +182,169 @@ router.get("/api/feishu/status", async (ctx) => {
 
 // Image generation API call
 async function callImageGenerationAPI(task: any) {
-  // This is a placeholder implementation
-  // In a real scenario, you would call an image generation API (e.g., DALL-E, Midjourney)
+  // Get API configuration from environment variables
+  const API_BASE = Deno.env.get("API_BASE_URL") || "https://api.example.com";
+  const API_KEY = Deno.env.get("API_KEY");
+  
+  if (!API_KEY) {
+    throw new Error("API_KEY环境变量未设置");
+  }
+  
   console.log("Generating image for task:", task);
+  console.log("Using API endpoint:", API_BASE);
   
-  // Simulate API call
-  await new Promise(resolve => setTimeout(resolve, 2000));
-  
-  // Mock response with a placeholder image URL
-  return {
-    imageUrl: "https://picsum.photos/seed/" + encodeURIComponent(task.prompt) + "/1024/1024.jpg"
-  };
+  try {
+    // Prepare request body for Image Generation API
+    const requestBody = {
+      model: task.model || "dall-e-3",
+      prompt: task.prompt,
+      size: "1024x1024"
+    };
+    
+    console.log("API request body:", JSON.stringify(requestBody, null, 2));
+    
+    // Call image generation API
+    const response = await fetch(`${API_BASE}/v1/images/generations`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${API_KEY}`
+      },
+      body: JSON.stringify(requestBody)
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("API call failed:", response.status, errorText);
+      throw new Error(`API调用失败: HTTP ${response.status}: ${errorText}`);
+    }
+    
+    const data = await response.json();
+    
+    // Extract image URL from response
+    const imageUrl = data.data?.[0]?.url || data.url;
+    
+    if (!imageUrl) {
+      console.error("API response:", JSON.stringify(data, null, 2));
+      throw new Error("API响应中未找到图片URL");
+    }
+    
+    console.log("Generated image URL:", imageUrl);
+    
+    return { imageUrl };
+    
+  } catch (error) {
+    console.error("Image generation API error:", error);
+    throw error;
+  }
 }
 
 // Video generation API call
 async function callVideoGenerationAPI(task: any) {
-  // This is a placeholder implementation
-  // In a real scenario, you would call a video generation API (e.g., Sora)
-  console.log("Generating video for task:", task);
+  // Get API configuration from environment variables
+  const API_BASE = Deno.env.get("API_BASE_URL") || "https://api.example.com";
+  const API_KEY = Deno.env.get("API_KEY");
   
-  // Check if there's a Sora image for reference
-  if (task.soraImage) {
-    console.log("Using Sora image for video generation:", task.soraImage);
-    // In a real implementation, you would fetch the image URL and include it in the API call
-    // await feishuService.getSoraImageUrl(task.soraImage);
+  if (!API_KEY) {
+    throw new Error("API_KEY环境变量未设置");
   }
   
-  // Simulate API call (longer for video generation with image reference)
-  await new Promise(resolve => setTimeout(resolve, task.soraImage ? 7000 : 5000));
+  console.log("Generating video for task:", task);
+  console.log("Using API endpoint:", API_BASE);
   
-  // Mock response with a placeholder video URL
-  return {
-    videoUrl: "https://example.com/videos/" + task.recordId + ".mp4"
-  };
+  try {
+    // Prepare request body for Sora API
+    const requestBody = {
+      model: task.model || "sora-video-landscape-10s",
+      prompt: task.prompt,
+      ...(task.soraImage && { 
+        image_url: task.soraImage 
+      })
+    };
+    
+    console.log("API request body:", JSON.stringify(requestBody, null, 2));
+    
+    // Call the video generation API
+    const response = await fetch(`${API_BASE}/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${API_KEY}`
+      },
+      body: JSON.stringify(requestBody)
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("API call failed:", response.status, errorText);
+      throw new Error(`API调用失败: HTTP ${response.status}: ${errorText}`);
+    }
+    
+    // Process the streaming response to extract video URL
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '', videoUrl = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6);
+          if (data === '[DONE]') continue;
+          try {
+            const json = JSON.parse(data);
+            const content = json.choices?.[0]?.delta?.content || '';
+            
+            // URL extraction logic for video URLs
+            if (content) {
+              const urlPatterns = [
+                /https?:\/\/[^\s<>"']+/g,
+                /(?:https?:\/\/)?[^\s<>"']*\.(?:mp4|webm|mov|avi)[^\s<>"']*/gi,
+                /(?:https?:\/\/)?[^\s<>"']*(?:video|media|cdn)[^\s<>"']*\.(?:mp4|webm|mov|avi)[^\s<>"']*/gi
+              ];
+              
+              for (const pattern of urlPatterns) {
+                const matches = content.match(pattern);
+                if (matches) {
+                  for (const match of matches) {
+                    let fullUrl = match;
+                    if (!fullUrl.startsWith('http')) {
+                      fullUrl = 'https://' + fullUrl;
+                    }
+                    if (fullUrl.match(/\.(mp4|webm|mov|avi)(\?|$)/i) || 
+                        fullUrl.includes('video') || 
+                        fullUrl.includes('media') ||
+                        fullUrl.includes('cdn')) {
+                      videoUrl = fullUrl;
+                      console.log("Found video URL:", videoUrl);
+                      break;
+                    }
+                  }
+                  if (videoUrl) break;
+                }
+              }
+            }
+          } catch (e) {
+            console.error("Parse error:", { data: data.slice(0, 100) });
+          }
+        }
+      }
+    }
+    
+    if (!videoUrl) {
+      throw new Error("API响应中未找到视频URL");
+    }
+    
+    return { videoUrl };
+    
+  } catch (error) {
+    console.error("Video generation API error:", error);
+    throw error;
+  }
 }
 
 // Register routes

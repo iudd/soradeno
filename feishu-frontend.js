@@ -47,9 +47,15 @@ async function loadFeishuTasks() {
             html += '<h4 style="color:#f59e0b;margin:12px 0 8px;">⏳ 待生成</h4>';
             pending.forEach(t => {
                 const p = t.prompt.length > 60 ? t.prompt.slice(0,60)+'...' : t.prompt;
+                const typeIcon = t.generationType === '图片生成' ? '🖼️' : '🎬';
+                const imageIcon = t.soraImage ? '🖼️' : '';
+                
                 html += `<div class="history-item" id="task-${t.recordId}" style="margin-bottom:8px;">
-                    <div style="flex:1;"><div style="font-weight:500;">${p}</div>
-                    <div style="font-size:12px;color:#94a3b8;">🎬 ${t.model}</div></div>
+                    <div style="flex:1;">
+                        <div style="font-weight:500;">${p}</div>
+                        <div style="font-size:12px;color:#94a3b8;">${typeIcon} ${t.model} ${imageIcon}</div>
+                        ${t.soraImage ? `<div style="font-size:11px;color:#6366f1;">含参考图片</div>` : ''}
+                    </div>
                     <button class="btn btn-primary" id="btn-${t.recordId}" onclick="genTask('${t.recordId}')" style="padding:6px 12px;font-size:13px;">生成</button>
                 </div>`;
             });
@@ -59,10 +65,24 @@ async function loadFeishuTasks() {
             html += '<h4 style="color:#10b981;margin:16px 0 8px;">✅ 已完成</h4>';
             done.slice(0,5).forEach(t => {
                 const p = t.prompt ? (t.prompt.length > 60 ? t.prompt.slice(0,60)+'...' : t.prompt) : '(无)';
+                const typeIcon = t.generationType === '图片生成' ? '🖼️' : '🎬';
+                const imageIcon = t.soraImage ? '🖼️' : '';
+                
+                // 根据类型显示不同的按钮
+                let mediaButton = '';
+                if (t.videoUrl && t.generationType === '视频生成') {
+                    mediaButton = `<a href="${t.videoUrl}" target="_blank" class="btn btn-secondary" style="padding:6px 12px;font-size:13px;">播放</a>`;
+                } else if (t.imageUrl && t.generationType === '图片生成') {
+                    mediaButton = `<a href="${t.imageUrl}" target="_blank" class="btn btn-secondary" style="padding:6px 12px;font-size:13px;">查看</a>`;
+                }
+                
                 html += `<div class="history-item" style="margin-bottom:8px;border-color:#10b981;">
-                    <div style="flex:1;"><div style="font-weight:500;">${p}</div>
-                    <div style="font-size:12px;color:#94a3b8;">✅ ${t.status}</div></div>
-                    ${t.videoUrl ? `<a href="${t.videoUrl}" target="_blank" class="btn btn-secondary" style="padding:6px 12px;font-size:13px;">播放</a>` : ''}
+                    <div style="flex:1;">
+                        <div style="font-weight:500;">${p}</div>
+                        <div style="font-size:12px;color:#94a3b8;">${typeIcon} ${t.status} ${imageIcon}</div>
+                        ${t.soraImage ? `<div style="font-size:11px;color:#6366f1;">含参考图片</div>` : ''}
+                    </div>
+                    ${mediaButton}
                 </div>`;
             });
         }
@@ -86,7 +106,14 @@ async function genTask(id) {
         if (!res.ok) throw new Error(data.error);
         
         updateFeishuStatus('✅ 生成成功! 已同步到飞书', 'success');
-        if (data.videoUrl) updateFeishuStatus('🔗 ' + data.videoUrl, 'success');
+        
+        // 根据生成类型显示不同的消息
+        if (data.generationType === '图片生成' && data.imageUrl) {
+            updateFeishuStatus('🖼️ ' + data.imageUrl, 'success');
+        } else if (data.videoUrl) {
+            updateFeishuStatus('🎬 ' + data.videoUrl, 'success');
+        }
+        
         if (btn) { btn.innerHTML = '✅'; btn.style.background = '#10b981'; }
     } catch (e) {
         updateFeishuStatus('❌ 失败: ' + e.message, 'error');

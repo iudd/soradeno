@@ -1,56 +1,278 @@
-        const reader = res.body!.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '', videoUrl = null;
+import { Application, Router } from "https://deno.land/x/oak@v12.6.1/mod.ts";
+import { oakCors } from "https://deno.land/x/cors@v1.2.2/mod.ts";
+import { FeishuService } from "./feishu.ts";
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6);
-              if (data === '[DONE]') continue;
-              try {
-                const json = JSON.parse(data);
-                const content = json.choices?.[0]?.delta?.content || '';
-                
-                // 改进URL提取逻辑
-                if (content) {
-                  // 更精确的URL匹配：http或https开头，包含域名和路径
-                  const urlPatterns = [
-                    /https?:\/\/[^\s<>"']+/g,  // 基本URL模式
-                    /(?:https?:\/\/)?[^\s<>"']*\.(?:mp4|webm|mov|avi)[^\s<>"']*/gi,  // 视频文件扩展名
-                    /(?:https?:\/\/)?[^\s<>"']*(?:video|media|cdn)[^\s<>"']*\.(?:mp4|webm|mov|avi)[^\s<>"']*/gi  // 包含video/media/cdn关键词的URL
-                  ];
-                  
-                  for (const pattern of urlPatterns) {
-                    const matches = content.match(pattern);
-                    if (matches) {
-                      for (const match of matches) {
-                        // 确保是完整的URL
-                        let fullUrl = match;
-                        if (!fullUrl.startsWith('http')) {
-                          fullUrl = 'https://' + fullUrl;
-                        }
-                        // 检查是否看起来像视频URL
-                        if (fullUrl.match(/\.(mp4|webm|mov|avi)(\?|$)/i) || 
-                            fullUrl.includes('video') || 
-                            fullUrl.includes('media') ||
-                            fullUrl.includes('cdn')) {
-                          videoUrl = fullUrl;
-                          log("INFO", id, "Found video URL", { videoUrl });
-                          break;
-                        }
-                      }
-                      if (videoUrl) break;
-                    }
-                  }
-                }
-              } catch (e) {
-                log("DEBUG", id, "Parse error", { data: data.slice(0, 100) });
-              }
-            }
-          }
-        }
+const app = new Application();
+const router = new Router();
+
+// Enable CORS
+app.use(oakCors({
+  origin: true,
+}));
+
+// Initialize Feishu service
+const feishuService = new FeishuService();
+
+// Error handling middleware
+app.use(async (ctx, next) => {
+  try {
+    await next();
+  } catch (err) {
+    console.error("Server error:", err);
+    ctx.response.status = 500;
+    ctx.response.body = { error: err.message };
+  }
+});
+
+// Logger middleware
+app.use(async (ctx, next) => {
+  console.log(`${ctx.request.method} ${ctx.request.url}`);
+  await next();
+});
+
+// API Routes
+
+// Get all records
+router.get("/api/feishu/records", async (ctx) => {
+  try {
+    if (!feishuService.isConfigured()) {
+      ctx.response.status = 503;
+      ctx.response.body = { error: "飞书服务未配置" };
+      return;
+    }
+    
+    const records = await feishuService.getAllRecords();
+    const parsedRecords = records.map(record => feishuService.parseTaskRecord(record));
+    
+    ctx.response.body = { records: parsedRecords };
+  } catch (err) {
+    ctx.response.status = 500;
+    ctx.response.body = { error: err.message };
+  }
+});
+
+// Get pending tasks
+router.get("/api/feishu/tasks", async (ctx) => {
+  try {
+    if (!feishuService.isConfigured()) {
+      ctx.response.status = 503;
+      ctx.response.body = { error: "飞书服务未配置" };
+      return;
+    }
+    
+    const tasks = await feishuService.getPendingTasks();
+    const parsedTasks = tasks.map(task => feishuService.parseTaskRecord(task));
+    
+    ctx.response.body = { tasks: parsedTasks };
+  } catch (err) {
+    ctx.response.status = 500;
+    ctx.response.body = { error: err.message };
+  }
+});
+
+// Get a single task
+router.get("/api/feishu/tasks/:recordId", async (ctx) => {
+  try {
+    const { recordId } = ctx.params;
+    if (!recordId) {
+      ctx.response.status = 400;
+      ctx.response.body = { error: "缺少记录ID" };
+      return;
+    }
+    
+    const task = await feishuService.getTask(recordId);
+    const parsedTask = feishuService.parseTaskRecord(task);
+    
+    ctx.response.body = { task: parsedTask };
+  } catch (err) {
+    ctx.response.status = 500;
+    ctx.response.body = { error: err.message };
+  }
+});
+
+// Get Sora image URL
+router.get("/api/feishu/image/:imageToken", async (ctx) => {
+  try {
+    const { imageToken } = ctx.params;
+    if (!imageToken) {
+      ctx.response.status = 400;
+      ctx.response.body = { error: "缺少图片Token" };
+      return;
+    }
+    
+    const imageUrl = await feishuService.getSoraImageUrl(imageToken);
+    
+    ctx.response.body = { imageUrl: imageUrl };
+  } catch (err) {
+    ctx.response.status = 500;
+    ctx.response.body = { error: err.message };
+  }
+});
+
+// Generate a single task
+router.post("/api/feishu/generate/:recordId", async (ctx) => {
+  try {
+    const { recordId } = ctx.params;
+    if (!recordId) {
+      ctx.response.status = 400;
+      ctx.response.body = { error: "缺少记录ID" };
+      return;
+    }
+    
+    // Get the task details
+    const taskRecord = await feishuService.getTask(recordId);
+    const task = feishuService.parseTaskRecord(recordId);
+    
+    // Update status to "生成中"
+    await feishuService.updateTaskStatus(recordId, "生成中");
+    
+    // Call the appropriate API based on the generation type
+    let response, mediaUrl;
+    const generationType = task.generationType || "视频生成";
+    
+    if (generationType === "图片生成") {
+      // Call image generation API
+      response = await callImageGenerationAPI(task);
+      mediaUrl = response.imageUrl;
+    } else {
+      // Call video generation API (default)
+      response = await callVideoGenerationAPI(task);
+      mediaUrl = response.videoUrl;
+    }
+    
+    // Update the task with the result
+    if (mediaUrl) {
+      if (generationType === "图片生成") {
+        await feishuService.updateTaskStatus(recordId, "成功", undefined, mediaUrl);
+      } else {
+        await feishuService.updateTaskStatus(recordId, "成功", mediaUrl, undefined);
+      }
+    } else {
+      await feishuService.updateTaskStatus(recordId, "失败", undefined, undefined, "生成失败：未返回媒体URL");
+    }
+    
+    // Return the result
+    ctx.response.body = {
+      success: true,
+      generationType: generationType,
+      ...(mediaUrl && { [generationType === "图片生成" ? "imageUrl" : "videoUrl"]: mediaUrl })
+    };
+  } catch (err) {
+    console.error("Generation error:", err);
+    
+    // Update the task status to failed
+    try {
+      await feishuService.updateTaskStatus(ctx.params.recordId, "失败", undefined, undefined, err.message);
+    } catch (updateErr) {
+      console.error("Failed to update task status:", updateErr);
+    }
+    
+    ctx.response.status = 500;
+    ctx.response.body = { error: err.message };
+  }
+});
+
+// Check Feishu status
+router.get("/api/feishu/status", async (ctx) => {
+  ctx.response.body = {
+    configured: feishuService.isConfigured(),
+    configStatus: feishuService.getConfigStatus()
+  };
+});
+
+// Image generation API call
+async function callImageGenerationAPI(task: any) {
+  // This is a placeholder implementation
+  // In a real scenario, you would call an image generation API (e.g., DALL-E, Midjourney)
+  console.log("Generating image for task:", task);
+  
+  // Simulate API call
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  
+  // Mock response with a placeholder image URL
+  return {
+    imageUrl: "https://picsum.photos/seed/" + encodeURIComponent(task.prompt) + "/1024/1024.jpg"
+  };
+}
+
+// Video generation API call
+async function callVideoGenerationAPI(task: any) {
+  // This is a placeholder implementation
+  // In a real scenario, you would call a video generation API (e.g., Sora)
+  console.log("Generating video for task:", task);
+  
+  // Check if there's a Sora image for reference
+  if (task.soraImage) {
+    console.log("Using Sora image for video generation:", task.soraImage);
+    // In a real implementation, you would fetch the image URL and include it in the API call
+    // await feishuService.getSoraImageUrl(task.soraImage);
+  }
+  
+  // Simulate API call (longer for video generation with image reference)
+  await new Promise(resolve => setTimeout(resolve, task.soraImage ? 7000 : 5000));
+  
+  // Mock response with a placeholder video URL
+  return {
+    videoUrl: "https://example.com/videos/" + task.recordId + ".mp4"
+  };
+}
+
+// Register routes
+app.use(router.routes());
+app.use(router.allowedMethods());
+
+// Default route - serve index.html
+app.use(async (ctx) => {
+  await send(ctx, ctx.request.url.pathname, {
+    root: `${Deno.cwd()}`,
+    index: "index.html",
+  });
+});
+
+// Start the server
+const port = parseInt(Deno.env.get("PORT") || "8000");
+console.log(`Server running on http://localhost:${port}`);
+
+await app.listen({ port });
+
+// Helper function to serve static files
+async function send(ctx, pathname, options) {
+  try {
+    await Deno.readFile(options.root + pathname);
+    await sendFile(ctx, pathname, options);
+  } catch (e) {
+    if (e instanceof Deno.errors.NotFound) {
+      // Default to index.html for SPA routing
+      await sendFile(ctx, "/index.html", { root: options.root, index: "index.html" });
+    } else {
+      throw e;
+    }
+  }
+}
+
+// Function to send a file
+async function sendFile(ctx, pathname, options) {
+  const file = await Deno.open(options.root + pathname);
+  const fileInfo = await Deno.stat(options.root + pathname);
+  
+  ctx.response.body = file.readable;
+  ctx.response.type = getType(pathname);
+  ctx.response.headers.set("Content-Length", fileInfo.size.toString());
+}
+
+// Function to get MIME type based on file extension
+function getType(pathname) {
+  const ext = pathname.split('.').pop();
+  const types = {
+    "html": "text/html",
+    "js": "application/javascript",
+    "css": "text/css",
+    "json": "application/json",
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "gif": "image/gif",
+    "svg": "image/svg+xml",
+    "ico": "image/x-icon"
+  };
+  return types[ext] || "application/octet-stream";
+}

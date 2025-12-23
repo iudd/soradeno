@@ -178,11 +178,38 @@ export class FeishuService {
         return data.data.record;
     }
 
+    // 获取Sora图片的URL
+    async getSoraImageUrl(soraImageToken: string): Promise<string> {
+        if (!soraImageToken) {
+            throw new Error("缺少图片token");
+        }
+        
+        const token = await this.getTenantAccessToken();
+        
+        const url = `https://open.feishu.cn/open-apis/drive/v1/files/${soraImageToken}/download`;
+        
+        const response = await fetch(url, {
+            method: "GET",
+            headers: {
+                "Authorization": `Bearer ${token}`,
+            },
+        });
+        
+        const data = await response.json();
+        
+        if (data.code !== 0) {
+            throw new Error(`获取图片URL失败: ${data.msg}`);
+        }
+        
+        return data.data.download_url || data.data.url;
+    }
+
     // 更新任务状态
     async updateTaskStatus(
         recordId: string,
         status: string,
         videoUrl?: string,
+        imageUrl?: string,
         error?: string
     ): Promise<void> {
         const token = await this.getTenantAccessToken();
@@ -192,11 +219,19 @@ export class FeishuService {
             "是否已生成": status === "成功",
         };
 
-        if (status === "成功" && videoUrl) {
-            fields["视频URL"] = {
-                link: videoUrl,
-                text: "查看视频",
-            };
+        if (status === "成功") {
+            if (videoUrl) {
+                fields["视频URL"] = {
+                    link: videoUrl,
+                    text: "查看视频",
+                };
+            }
+            if (imageUrl) {
+                fields["图片URL"] = {
+                    link: imageUrl,
+                    text: "查看图片",
+                };
+            }
             fields["生成时间"] = Date.now();
         }
 
@@ -252,10 +287,13 @@ export class FeishuService {
         character?: string;
         model: string;
         modelDisplay: string;
+        generationType: string;
+        soraImage?: string;
         status: string;
         isGenerated: boolean;
         createdTime?: string;
         videoUrl?: string;
+        imageUrl?: string;
     } {
         const fields = record.fields || {};
         
@@ -296,9 +334,43 @@ export class FeishuService {
             }
         }
         
+        // 尝试获取图片URL
+        let imageUrl = undefined;
+        if (fields["图片URL"]) {
+            if (typeof fields["图片URL"] === "string") {
+                imageUrl = fields["图片URL"];
+            } else if (fields["图片URL"].link) {
+                imageUrl = fields["图片URL"].link;
+            }
+        }
+        
+        // 尝试获取Sora图片
+        let soraImage = undefined;
+        if (fields["Sora图片"]) {
+            if (typeof fields["Sora图片"] === "string") {
+                soraImage = fields["Sora图片"];
+            } else if (Array.isArray(fields["Sora图片"]) && fields["Sora图片"].length > 0) {
+                const item = fields["Sora图片"][0];
+                if (typeof item === "string") {
+                    soraImage = item;
+                } else if (item && item.url) {
+                    soraImage = item.url;
+                } else if (item && item.file_token) {
+                    soraImage = item.file_token;
+                }
+            } else if (fields["Sora图片"].url) {
+                soraImage = fields["Sora图片"].url;
+            } else if (fields["Sora图片"].file_token) {
+                soraImage = fields["Sora图片"].file_token;
+            }
+        }
+        
         // 获取模型名称
         const modelDisplay = fields["模型"] || "sora-video-portrait-10s";
         const model = this.parseModelName(fields["模型"]);
+        
+        // 获取生成类型
+        const generationType = fields["生成类型"] || "视频生成";
 
         return {
             recordId: record.record_id,
@@ -306,10 +378,13 @@ export class FeishuService {
             character: character,
             model: model,
             modelDisplay: modelDisplay,
+            generationType: generationType,
+            soraImage: soraImage,
             status: fields["生成状态"] || "待生成",
             isGenerated: fields["是否已生成"] || false,
             createdTime: fields["生成时间"] ? new Date(fields["生成时间"]).toLocaleString("zh-CN") : undefined,
             videoUrl: videoUrl,
+            imageUrl: imageUrl,
         };
     }
 }

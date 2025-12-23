@@ -30,13 +30,13 @@ export class FeishuService {
         return configured;
     }
 
-    // 获取配置详情（用于调试）
+    // 获取配置详情（用于调试，不暴露敏感信息）
     getConfigStatus(): object {
         return {
-            appId: this.appId ? `${this.appId.slice(0, 10)}...` : null,
+            appIdSet: !!this.appId,
             appSecretSet: !!this.appSecret,
-            appToken: this.appToken || null,
-            tableId: this.tableId || null,
+            appTokenSet: !!this.appToken,
+            tableIdSet: !!this.tableId,
             isConfigured: this.isConfigured()
         };
     }
@@ -50,7 +50,6 @@ export class FeishuService {
         }
 
         console.log("[Feishu] 获取新的 tenant_access_token...");
-        console.log(`[Feishu] 请求参数: app_id=${this.appId}`);
 
         const response = await fetch(
             "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
@@ -67,7 +66,6 @@ export class FeishuService {
         );
 
         const data = await response.json();
-        console.log("[Feishu] Token 响应:", JSON.stringify(data, null, 2));
 
         if (data.code !== 0) {
             console.error("[Feishu] 获取 token 失败:", data.msg);
@@ -82,12 +80,12 @@ export class FeishuService {
         return this.accessToken;
     }
 
-    // 获取所有记录（用于调试和显示）
+    // 获取所有记录
     async getAllRecords(limit: number = 100): Promise<any[]> {
         const token = await this.getTenantAccessToken();
 
         const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${this.appToken}/tables/${this.tableId}/records?page_size=${limit}`;
-        console.log("[Feishu] 获取所有记录, URL:", url);
+        console.log("[Feishu] 获取所有记录");
 
         const response = await fetch(url, {
             method: "GET",
@@ -97,7 +95,6 @@ export class FeishuService {
         });
 
         const data = await response.json();
-        console.log("[Feishu] 获取记录响应:", JSON.stringify(data, null, 2));
 
         if (data.code !== 0) {
             console.error("[Feishu] 获取记录失败:", data.msg, "code:", data.code);
@@ -106,12 +103,6 @@ export class FeishuService {
 
         const items = data.data?.items || [];
         console.log(`[Feishu] 获取到 ${items.length} 条记录`);
-        
-        // 打印每条记录的字段名
-        if (items.length > 0) {
-            console.log("[Feishu] 第一条记录的字段:", Object.keys(items[0].fields));
-            console.log("[Feishu] 第一条记录内容:", JSON.stringify(items[0], null, 2));
-        }
 
         return items;
     }
@@ -138,8 +129,7 @@ export class FeishuService {
         };
 
         const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${this.appToken}/tables/${this.tableId}/records/search`;
-        console.log("[Feishu] 获取待生成任务, URL:", url);
-        console.log("[Feishu] 过滤条件:", JSON.stringify(filter, null, 2));
+        console.log("[Feishu] 获取待生成任务");
 
         const response = await fetch(url, {
             method: "POST",
@@ -154,7 +144,6 @@ export class FeishuService {
         });
 
         const data = await response.json();
-        console.log("[Feishu] 待生成任务响应:", JSON.stringify(data, null, 2));
 
         if (data.code !== 0) {
             console.error("[Feishu] 获取待生成任务失败:", data.msg, "code:", data.code);
@@ -172,7 +161,6 @@ export class FeishuService {
         const token = await this.getTenantAccessToken();
 
         const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${this.appToken}/tables/${this.tableId}/records/${recordId}`;
-        console.log("[Feishu] 获取单个任务, URL:", url);
 
         const response = await fetch(url, {
             method: "GET",
@@ -182,7 +170,6 @@ export class FeishuService {
         });
 
         const data = await response.json();
-        console.log("[Feishu] 单个任务响应:", JSON.stringify(data, null, 2));
 
         if (data.code !== 0) {
             throw new Error(`获取任务失败: ${data.msg}`);
@@ -217,7 +204,7 @@ export class FeishuService {
             fields["错误信息"] = error;
         }
 
-        console.log("[Feishu] 更新任务状态:", { recordId, fields });
+        console.log("[Feishu] 更新任务状态:", { recordId, status });
 
         const response = await fetch(
             `https://open.feishu.cn/open-apis/bitable/v1/apps/${this.appToken}/tables/${this.tableId}/records/${recordId}`,
@@ -234,65 +221,28 @@ export class FeishuService {
         );
 
         const data = await response.json();
-        console.log("[Feishu] 更新状态响应:", JSON.stringify(data, null, 2));
 
         if (data.code !== 0) {
             throw new Error(`更新任务状态失败: ${data.msg}`);
         }
     }
 
-    // 批量更新任务状态
-    async batchUpdateTasks(updates: Array<{
-        recordId: string;
-        status: string;
-        videoUrl?: string;
-        error?: string;
-    }>): Promise<void> {
-        const token = await this.getTenantAccessToken();
-
-        const records = updates.map(update => {
-            const fields: any = {
-                "生成状态": update.status,
-                "是否已生成": update.status === "成功",
-            };
-
-            if (update.status === "成功" && update.videoUrl) {
-                fields["视频URL"] = {
-                    link: update.videoUrl,
-                    text: "查看视频",
-                };
-                fields["生成时间"] = Date.now();
-            }
-
-            if (update.status === "失败" && update.error) {
-                fields["错误信息"] = update.error;
-            }
-
-            return {
-                record_id: update.recordId,
-                fields: fields,
-            };
-        });
-
-        const response = await fetch(
-            `https://open.feishu.cn/open-apis/bitable/v1/apps/${this.appToken}/tables/${this.tableId}/records/batch_update`,
-            {
-                method: "POST",
-                headers: {
-                    "Authorization": `Bearer ${token}`,
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    records: records,
-                }),
-            }
-        );
-
-        const data = await response.json();
-
-        if (data.code !== 0) {
-            throw new Error(`批量更新任务失败: ${data.msg}`);
+    // 解析模型名称，提取实际的模型ID
+    private parseModelName(modelField: any): string {
+        if (!modelField) {
+            return "sora-video-portrait-10s";
         }
+        
+        const modelStr = String(modelField);
+        
+        // 如果包含括号说明，提取前面的模型ID
+        // 例如: "sora-video-portrait-10s（竖屏10秒）" -> "sora-video-portrait-10s"
+        const match = modelStr.match(/^(sora-[a-z0-9-]+)/i);
+        if (match) {
+            return match[1];
+        }
+        
+        return modelStr;
     }
 
     // 解析任务记录
@@ -301,13 +251,40 @@ export class FeishuService {
         prompt: string;
         character?: string;
         model: string;
+        modelDisplay: string;
         status: string;
         isGenerated: boolean;
         createdTime?: string;
         videoUrl?: string;
-        rawFields: any;
     } {
         const fields = record.fields || {};
+        
+        // 获取提示词，确保是字符串
+        let prompt = "";
+        if (fields["提示词"]) {
+            if (typeof fields["提示词"] === "string") {
+                prompt = fields["提示词"];
+            } else if (Array.isArray(fields["提示词"])) {
+                // 飞书多行文本可能是数组
+                prompt = fields["提示词"].map((item: any) => 
+                    typeof item === "string" ? item : (item.text || "")
+                ).join("");
+            } else if (typeof fields["提示词"] === "object" && fields["提示词"].text) {
+                prompt = fields["提示词"].text;
+            }
+        }
+        
+        // 获取角色
+        let character = undefined;
+        if (fields["角色"]) {
+            if (typeof fields["角色"] === "string") {
+                character = fields["角色"];
+            } else if (Array.isArray(fields["角色"])) {
+                character = fields["角色"].map((item: any) => 
+                    typeof item === "string" ? item : (item.text || "")
+                ).join("");
+            }
+        }
         
         // 尝试获取视频URL
         let videoUrl = undefined;
@@ -318,18 +295,21 @@ export class FeishuService {
                 videoUrl = fields["视频URL"].link;
             }
         }
+        
+        // 获取模型名称
+        const modelDisplay = fields["模型"] || "sora-video-portrait-10s";
+        const model = this.parseModelName(fields["模型"]);
 
         return {
             recordId: record.record_id,
-            prompt: fields["提示词"] || "",
-            character: fields["角色"] || undefined,
-            // 默认模型改为竖屏10秒
-            model: fields["模型"] || "sora-video-portrait-10s",
+            prompt: prompt,
+            character: character,
+            model: model,
+            modelDisplay: modelDisplay,
             status: fields["生成状态"] || "待生成",
             isGenerated: fields["是否已生成"] || false,
-            createdTime: fields["创建时间"] ? new Date(fields["创建时间"]).toLocaleString("zh-CN") : undefined,
+            createdTime: fields["生成时间"] ? new Date(fields["生成时间"]).toLocaleString("zh-CN") : undefined,
             videoUrl: videoUrl,
-            rawFields: fields, // 返回原始字段用于调试
         };
     }
 }

@@ -30,14 +30,10 @@ async function handler(req: Request): Promise<Response> {
   const requestId = crypto.randomUUID().slice(0, 8);
 
   // Log incoming request
-  log("INFO", requestId, `${req.method} ${url.pathname}`, {
-    origin: req.headers.get("origin"),
-    userAgent: req.headers.get("user-agent")?.slice(0, 50),
-  });
+  log("INFO", requestId, `${req.method} ${url.pathname}`);
 
   // Handle CORS
   if (req.method === "OPTIONS") {
-    log("INFO", requestId, "CORS preflight request");
     return new Response(null, {
       headers: {
         "Access-Control-Allow-Origin": "*",
@@ -50,7 +46,6 @@ async function handler(req: Request): Promise<Response> {
   try {
     // Serve index.html for root path
     if (url.pathname === "/" && req.method === "GET") {
-      log("INFO", requestId, "Serving index.html");
       return new Response(indexHtml, {
         headers: {
           "Content-Type": "text/html; charset=utf-8",
@@ -62,12 +57,9 @@ async function handler(req: Request): Promise<Response> {
     if (url.pathname === "/health" && req.method === "GET") {
       const healthData = {
         status: "ok",
-        api_base: API_BASE_URL,
-        api_key_configured: !!API_KEY,
         feishu_configured: feishuService.isConfigured(),
         timestamp: new Date().toISOString(),
       };
-      log("INFO", requestId, "Health check", healthData);
       return new Response(JSON.stringify(healthData), {
         headers: {
           "Access-Control-Allow-Origin": "*",
@@ -80,25 +72,17 @@ async function handler(req: Request): Promise<Response> {
     if (url.pathname === "/v1/chat/completions" && req.method === "POST") {
       const body = await req.json();
 
-      // Log request details
       log("INFO", requestId, "Chat completion request", {
         model: body.model,
-        messageCount: body.messages?.length,
         stream: body.stream,
       });
 
-      // Ensure stream is enabled for Sora2mb
       const requestBody = {
         ...body,
-        stream: body.stream !== false, // Default to true
+        stream: body.stream !== false,
       };
 
       const backendUrl = `${API_BASE_URL}/chat/completions`;
-      log("INFO", requestId, "Calling backend API", {
-        url: backendUrl,
-        hasApiKey: !!API_KEY,
-      });
-
       const startTime = Date.now();
       const response = await fetch(backendUrl, {
         method: "POST",
@@ -110,19 +94,11 @@ async function handler(req: Request): Promise<Response> {
       });
 
       const duration = Date.now() - startTime;
-      log("INFO", requestId, "Backend response", {
-        status: response.status,
-        statusText: response.statusText,
-        duration: `${duration}ms`,
-        contentType: response.headers.get("content-type"),
-      });
+      log("INFO", requestId, `Backend response: ${response.status} (${duration}ms)`);
 
       if (!response.ok) {
         const error = await response.text();
-        log("ERROR", requestId, "Backend API error", {
-          status: response.status,
-          error: error.slice(0, 500),
-        });
+        log("ERROR", requestId, "Backend API error", { error: error.slice(0, 200) });
         return new Response(error, {
           status: response.status,
           headers: {
@@ -132,9 +108,7 @@ async function handler(req: Request): Promise<Response> {
         });
       }
 
-      // Handle streaming response
       if (requestBody.stream && response.body) {
-        log("INFO", requestId, "Streaming response started");
         return new Response(response.body, {
           headers: {
             "Access-Control-Allow-Origin": "*",
@@ -146,7 +120,6 @@ async function handler(req: Request): Promise<Response> {
       }
 
       const data = await response.json();
-      log("INFO", requestId, "Non-streaming response completed");
       return new Response(JSON.stringify(data), {
         headers: {
           "Access-Control-Allow-Origin": "*",
@@ -157,15 +130,12 @@ async function handler(req: Request): Promise<Response> {
 
     // Models endpoint
     if (url.pathname === "/v1/models" && req.method === "GET") {
-      log("INFO", requestId, "Models list requested");
       const models = {
         object: "list",
         data: [
-          // Image models
           { id: "sora-image", object: "model", owned_by: "sora2mb" },
           { id: "sora-image-landscape", object: "model", owned_by: "sora2mb" },
           { id: "sora-image-portrait", object: "model", owned_by: "sora2mb" },
-          // Video models
           { id: "sora-video-10s", object: "model", owned_by: "sora2mb" },
           { id: "sora-video-15s", object: "model", owned_by: "sora2mb" },
           { id: "sora-video-landscape-10s", object: "model", owned_by: "sora2mb" },
@@ -174,7 +144,6 @@ async function handler(req: Request): Promise<Response> {
           { id: "sora-video-portrait-15s", object: "model", owned_by: "sora2mb" },
         ],
       };
-      log("INFO", requestId, `Returning ${models.data.length} models`);
       return new Response(JSON.stringify(models), {
         headers: {
           "Access-Control-Allow-Origin": "*",
@@ -185,14 +154,11 @@ async function handler(req: Request): Promise<Response> {
 
     // ==================== Feishu API endpoints ====================
 
-    // 获取飞书配置状态（包含调试信息）
+    // 获取飞书配置状态
     if (url.pathname === "/api/feishu/status" && req.method === "GET") {
-      log("INFO", requestId, "Feishu status check");
-      const configStatus = feishuService.getConfigStatus();
       return new Response(JSON.stringify({
         configured: feishuService.isConfigured(),
-        message: feishuService.isConfigured() ? "飞书已配置" : "飞书未配置，请设置环境变量",
-        debug: configStatus
+        message: feishuService.isConfigured() ? "飞书已配置" : "飞书未配置"
       }), {
         headers: {
           "Access-Control-Allow-Origin": "*",
@@ -201,14 +167,13 @@ async function handler(req: Request): Promise<Response> {
       });
     }
 
-    // 获取所有记录（调试用）
+    // 获取所有记录（用于页面显示）
     if (url.pathname === "/api/feishu/records" && req.method === "GET") {
-      log("INFO", requestId, "Fetching all Feishu records (debug)");
+      log("INFO", requestId, "Fetching all Feishu records");
 
       if (!feishuService.isConfigured()) {
         return new Response(JSON.stringify({
-          error: "飞书未配置",
-          debug: feishuService.getConfigStatus()
+          error: "飞书未配置"
         }), {
           status: 400,
           headers: {
@@ -227,11 +192,7 @@ async function handler(req: Request): Promise<Response> {
         return new Response(JSON.stringify({
           success: true,
           count: parsedRecords.length,
-          records: parsedRecords,
-          debug: {
-            message: "这是所有记录，包括已生成和未生成的",
-            firstRecordRaw: records.length > 0 ? records[0] : null
-          }
+          records: parsedRecords
         }), {
           headers: {
             "Access-Control-Allow-Origin": "*",
@@ -243,8 +204,7 @@ async function handler(req: Request): Promise<Response> {
           error: error instanceof Error ? error.message : String(error)
         });
         return new Response(JSON.stringify({
-          error: error instanceof Error ? error.message : "获取记录失败",
-          debug: feishuService.getConfigStatus()
+          error: error instanceof Error ? error.message : "获取记录失败"
         }), {
           status: 500,
           headers: {
@@ -257,12 +217,11 @@ async function handler(req: Request): Promise<Response> {
 
     // 获取待生成任务列表
     if (url.pathname === "/api/feishu/tasks" && req.method === "GET") {
-      log("INFO", requestId, "Fetching Feishu tasks");
+      log("INFO", requestId, "Fetching Feishu pending tasks");
 
       if (!feishuService.isConfigured()) {
         return new Response(JSON.stringify({
-          error: "飞书未配置",
-          debug: feishuService.getConfigStatus()
+          error: "飞书未配置"
         }), {
           status: 400,
           headers: {
@@ -292,8 +251,7 @@ async function handler(req: Request): Promise<Response> {
           error: error instanceof Error ? error.message : String(error)
         });
         return new Response(JSON.stringify({
-          error: error instanceof Error ? error.message : "获取任务失败",
-          debug: feishuService.getConfigStatus()
+          error: error instanceof Error ? error.message : "获取任务失败"
         }), {
           status: 500,
           headers: {
@@ -325,6 +283,8 @@ async function handler(req: Request): Promise<Response> {
         // 获取任务详情
         const task = await feishuService.getTask(recordId!);
         const parsedTask = feishuService.parseTaskRecord(task);
+
+        log("INFO", requestId, `Task: ${parsedTask.prompt.slice(0, 50)}...`);
 
         // 更新状态为"生成中"
         await feishuService.updateTaskStatus(recordId!, "生成中");
@@ -387,15 +347,17 @@ async function handler(req: Request): Promise<Response> {
         }
 
         if (videoUrl) {
-          // 更新状态为"成功"
           await feishuService.updateTaskStatus(recordId!, "成功", videoUrl);
-
-          log("INFO", requestId, "Video generated successfully", { videoUrl });
+          log("INFO", requestId, "Video generated successfully");
 
           return new Response(JSON.stringify({
             success: true,
             videoUrl: videoUrl,
-            task: parsedTask
+            task: {
+              recordId: parsedTask.recordId,
+              prompt: parsedTask.prompt.slice(0, 100),
+              model: parsedTask.model
+            }
           }), {
             headers: {
               "Access-Control-Allow-Origin": "*",
@@ -422,7 +384,6 @@ async function handler(req: Request): Promise<Response> {
       }
     }
 
-    log("WARN", requestId, `Route not found: ${url.pathname}`);
     return new Response(JSON.stringify({ error: "Not found" }), {
       status: 404,
       headers: {
@@ -434,7 +395,6 @@ async function handler(req: Request): Promise<Response> {
   } catch (error) {
     log("ERROR", requestId, "Server error", {
       message: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack?.slice(0, 500) : undefined,
     });
     return new Response(JSON.stringify({
       error: "Internal server error",
@@ -450,26 +410,11 @@ async function handler(req: Request): Promise<Response> {
 }
 
 const port = parseInt(Deno.env.get("PORT") || "8000");
-const rawApiUrl = Deno.env.get("API_BASE_URL");
 
-console.log("=".repeat(60));
+console.log("=".repeat(50));
 console.log("🚀 SoraDeno Server Starting");
-console.log("=".repeat(60));
-console.log(`Server running on port ${port}`);
-console.log(`API Base URL (raw): ${rawApiUrl || "not set (using default)"}`);
-console.log(`API Base URL (processed): ${API_BASE_URL}`);
-console.log(`API Key configured: ${API_KEY ? "Yes (length: " + API_KEY.length + ")" : "No"}`);
-console.log(`Feishu configured: ${feishuService.isConfigured() ? "Yes" : "No"}`);
-console.log(`Environment: ${Deno.env.get("DENO_DEPLOYMENT_ID") ? "Deno Deploy" : "Local"}`);
-
-// Validate URL
-if (!API_BASE_URL.endsWith("/v1")) {
-  console.log("⚠️  API_BASE_URL does not end with /v1, this may cause issues!");
-}
-if (!API_BASE_URL.startsWith("http")) {
-  console.log("❌ API_BASE_URL does not start with http/https!");
-}
-
-console.log("=".repeat(60));
+console.log(`   Port: ${port}`);
+console.log(`   Feishu: ${feishuService.isConfigured() ? "Configured" : "Not configured"}`);
+console.log("=".repeat(50));
 
 serve(handler, { port });

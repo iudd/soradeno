@@ -1,7 +1,3 @@
-// Default route - serve index.html with API_BASE injection
-app.use(async (ctx) => {
-  const { pathname } = ctx.request.url;
-  
   // Inject API_BASE into index.html
   if (pathname === "/" || pathname === "") {
     try {
@@ -24,16 +20,4 @@ app.use(async (ctx) => {
       ctx.response.status = 404;
       ctx.response.body = "index.html not found";
     }
-  } else {
-    // Serve other static files normally
-    try {
-      await send(ctx, pathname, {
-        root: `${Deno.cwd()}`,
-      });
-    } catch (error) {
-      console.error("Error serving static file:", error);
-      ctx.response.status = 404;
-      ctx.response.body = "File not found";
-    }
   }
-});

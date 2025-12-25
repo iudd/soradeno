@@ -26,8 +26,10 @@ app.use(async (ctx, next) => {
 
 // Logger middleware
 app.use(async (ctx, next) => {
-  console.log(`${ctx.request.method} ${ctx.request.url}`);
+  const start = Date.now();
   await next();
+  const ms = Date.now() - start;
+  console.log(`${new Date().toISOString()} ${ctx.request.method} ${ctx.request.url.pathname} - ${ms}ms`);
 });
 
 // API Routes
@@ -37,7 +39,10 @@ router.get("/api/feishu/records", async (ctx) => {
   try {
     if (!feishuService.isConfigured()) {
       ctx.response.status = 503;
-      ctx.response.body = { error: "飞书服务未配置" };
+      ctx.response.body = { 
+        error: "飞书服务未配置",
+        configStatus: feishuService.getConfigStatus()
+      };
       return;
     }
     
@@ -46,6 +51,7 @@ router.get("/api/feishu/records", async (ctx) => {
     
     ctx.response.body = { records: parsedRecords };
   } catch (err) {
+    console.error("获取记录失败:", err);
     ctx.response.status = 500;
     ctx.response.body = { error: err.message };
   }
@@ -56,7 +62,10 @@ router.get("/api/feishu/tasks", async (ctx) => {
   try {
     if (!feishuService.isConfigured()) {
       ctx.response.status = 503;
-      ctx.response.body = { error: "飞书服务未配置" };
+      ctx.response.body = { 
+        error: "飞书服务未配置",
+        configStatus: feishuService.getConfigStatus()
+      };
       return;
     }
     
@@ -65,6 +74,7 @@ router.get("/api/feishu/tasks", async (ctx) => {
     
     ctx.response.body = { tasks: parsedTasks };
   } catch (err) {
+    console.error("获取待生成任务失败:", err);
     ctx.response.status = 500;
     ctx.response.body = { error: err.message };
   }
@@ -85,6 +95,7 @@ router.get("/api/feishu/tasks/:recordId", async (ctx) => {
     
     ctx.response.body = { task: parsedTask };
   } catch (err) {
+    console.error("获取任务失败:", err);
     ctx.response.status = 500;
     ctx.response.body = { error: err.message };
   }
@@ -104,6 +115,7 @@ router.get("/api/feishu/image/:imageToken", async (ctx) => {
     
     ctx.response.body = { imageUrl: imageUrl };
   } catch (err) {
+    console.error("获取图片URL失败:", err);
     ctx.response.status = 500;
     ctx.response.body = { error: err.message };
   }
@@ -357,20 +369,26 @@ app.use(async (ctx) => {
   
   // Inject API_BASE into index.html
   if (pathname === "/" || pathname === "") {
-    let indexHtml = await Deno.readTextFile(`${Deno.cwd()}/index.html`);
-    
-    // Replace API_BASE with environment variable or fallback to current origin
-    const apiUrl = Deno.env.get("API_BASE_URL") || `https://${ctx.request.url.host}`;
-    console.log(`Injecting API_BASE: ${apiUrl}`);
-    
-    // Use a more flexible replacement to handle whitespace variations
-    indexHtml = indexHtml.replace(
-      /const API_BASE = window\.location\.origin;/g,
-      `const API_BASE = "${apiUrl}";`
-    );
-    
-    ctx.response.body = indexHtml;
-    ctx.response.type = "text/html";
+    try {
+      let indexHtml = await Deno.readTextFile(`${Deno.cwd()}/index.html`);
+      
+      // 使用当前域名而不是 API_BASE_URL
+      const currentOrigin = `${ctx.request.url.protocol}//${ctx.request.url.host}`;
+      console.log(`Injecting API_BASE: ${currentOrigin}`);
+      
+      // 替换前端的 API_BASE 配置
+      indexHtml = indexHtml.replace(
+        /const\s+API_BASE\s*=\s*window\.location\.origin\s*;/g,
+        `const API_BASE = "${currentOrigin}";`
+      );
+      
+      ctx.response.body = indexHtml;
+      ctx.response.type = "text/html";
+    } catch (e) {
+      console.error("读取 index.html 失败:", e);
+      ctx.response.status = 500;
+      ctx.response.body = { error: "无法加载页面" };
+    }
   } else {
     // Serve other static files normally
     await send(ctx, pathname, {
@@ -384,15 +402,25 @@ const port = parseInt(Deno.env.get("PORT") || "8000");
 const API_BASE_URL = Deno.env.get("API_BASE_URL");
 const API_KEY = Deno.env.get("API_KEY");
 
-console.log(`Server running on http://localhost:${port}`);
-console.log("API Configuration:");
-console.log(`  - API_BASE_URL: ${API_BASE_URL || "未设置"}`);
-console.log(`  - API_KEY: ${API_KEY ? API_KEY.slice(0, 10) + "..." : "未设置"}`);
+console.log(`
+===========================================
+服务启动成功!
+时间: ${new Date().toISOString()}
+端口: ${port}
+===========================================
+API 配置:
+  - API_BASE_URL: ${API_BASE_URL || "未设置"}
+  - API_KEY: ${API_KEY ? API_KEY.slice(0, 10) + "..." : "未设置"}
+===========================================
+飞书配置状态:
+${JSON.stringify(feishuService.getConfigStatus(), null, 2)}
+===========================================
+`);
 
 await app.listen({ port });
 
 // Helper function to serve static files
-async function send(ctx, pathname, options) {
+async function send(ctx: any, pathname: string, options: any) {
   const filePath = pathname === "/" ? "/index.html" : pathname;
   
   try {
@@ -418,7 +446,7 @@ async function send(ctx, pathname, options) {
 }
 
 // Function to send a file
-async function sendFile(ctx, filePath, options) {
+async function sendFile(ctx: any, filePath: string, options: any) {
   const fileInfo = await Deno.stat(filePath);
   const file = await Deno.open(filePath);
   
@@ -426,7 +454,7 @@ async function sendFile(ctx, filePath, options) {
   
   // Set MIME type based on file extension
   const ext = filePath.split('.').pop();
-  const types = {
+  const types: Record<string, string> = {
     "html": "text/html",
     "js": "application/javascript",
     "css": "text/css",
@@ -439,28 +467,11 @@ async function sendFile(ctx, filePath, options) {
     "ico": "image/x-icon"
   };
   
-  ctx.response.type = types[ext] || "application/octet-stream";
+  ctx.response.type = types[ext!] || "application/octet-stream";
   ctx.response.headers.set("Content-Length", fileInfo.size.toString());
   
   // Add cache control for static assets
   if (ext !== "html") {
     ctx.response.headers.set("Cache-Control", "max-age=3600");
   }
-}
-
-// Function to get MIME type based on file extension
-function getType(pathname) {
-  const ext = pathname.split('.').pop();
-  const types = {
-    "html": "text/html",
-    "js": "application/javascript",
-    "css": "text/css",
-    "json": "application/json",
-    "png": "image/png",
-    "jpg": "image/jpeg",
-    "gif": "image/gif",
-    "svg": "image/svg+xml",
-    "ico": "image/x-icon"
-  };
-  return types[ext] || "application/octet-stream";
 }

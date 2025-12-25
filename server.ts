@@ -377,8 +377,8 @@ async function callVideoGenerationAPI(task: any) {
   try {
     let response;
     
-    // 1. Priority: Try OpenAI chat completions format (Primary)
-    console.log("Trying OpenAI Chat API format (Primary)...");
+    // 1. Try OpenAI chat completions format FIRST
+    console.log("Trying OpenAI chat completions format...");
     
     const messages = [];
     if (task.soraImage) {
@@ -413,9 +413,9 @@ async function callVideoGenerationAPI(task: any) {
       body: JSON.stringify(chatRequestBody)
     });
 
-    // 2. Fallback: Try Sora direct format if Chat format fails
+    // 2. If OpenAI format fails (404/405/etc), fallback to Sora API format
     if (!response.ok) {
-      console.log(`Chat format failed (HTTP ${response.status}), trying Sora Direct format (Fallback)...`);
+      console.log(`OpenAI chat format failed (${response.status}), trying Sora API format...`);
       
       const soraRequestBody = {
         prompt: task.prompt,
@@ -487,13 +487,10 @@ async function callVideoGenerationAPI(task: any) {
               const urls = content.match(/https?:\/\/[^\s<>"']+/g);
               if (urls) {
                 for (const url of urls) {
-                  // Enhanced matching for video files
                   if (url.match(/\.(mp4|webm|mov|avi|m3u8|ts)(\?|$)/i) || 
                       url.includes('video') || 
                       url.includes('media') ||
-                      url.includes('cdn') || 
-                      url.includes('storage') ||
-                      url.includes('blob')) {
+                      url.includes('cdn')) {
                     videoUrl = url;
                     console.log("Found video URL:", videoUrl);
                     break;
@@ -504,8 +501,6 @@ async function callVideoGenerationAPI(task: any) {
           } catch (e) {
             // If not valid JSON, treat as plain text
             allContent += line;
-            console.log("Received plain text:", line);
-            
             const urls = line.match(/https?:\/\/[^\s<>"']+/g);
             if (urls) {
               for (const url of urls) {
@@ -523,8 +518,6 @@ async function callVideoGenerationAPI(task: any) {
         } else if (line.trim()) {
           // Handle non-SSE responses
           allContent += line;
-          console.log("Received line:", line);
-          
           const urls = line.match(/https?:\/\/[^\s<>"']+/g);
           if (urls) {
             for (const url of urls) {
@@ -549,7 +542,7 @@ async function callVideoGenerationAPI(task: any) {
       console.error("No video URL found. Full response content:");
       console.error(allContent.slice(-1000));
       
-      // Try to find any video URL in the entire content with broader regex
+      // Try to find any video URL in the entire content
       const allUrls = allContent.match(/https?:\/\/[^\s<>"']*\.(?:mp4|webm|mov|avi|m3u8|ts)[^\s<>"']*/gi);
       if (allUrls && allUrls.length > 0) {
         videoUrl = allUrls[0];

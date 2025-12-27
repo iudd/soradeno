@@ -692,9 +692,8 @@ async function callVideoGenerationAPI(task: any, onProgress?: (chunk: string) =>
                 break;
               }
             }
-=======
             // console.error("Parse error:", { data: data.slice(0, 100) });
->>>>>>> 29a666f (feat: Enhance Feishu integration with real-time logs, duplicate check, and better URL extraction)
+
           }
         }
       }
@@ -719,137 +718,13 @@ async function callVideoGenerationAPI(task: any, onProgress?: (chunk: string) =>
     if (!videoUrl) {
       throw new Error(`API响应中未找到视频URL。`);
     }
-<<<<<<< HEAD
 
     console.log("Final video URL:", videoUrl);
-=======
 
->>>>>>> 29a666f (feat: Enhance Feishu integration with real-time logs, duplicate check, and better URL extraction)
     return { videoUrl };
 
   } catch (error) {
     console.error("Video generation API error:", error);
     throw error;
   }
-<<<<<<< HEAD
-=======
-}
-
-// Register routes
-app.use(router.routes());
-app.use(router.allowedMethods());
-
-// Default route - serve index.html with API_BASE injection
-app.use(async (ctx) => {
-  const { pathname } = ctx.request.url;
-
-  // Inject API_BASE into index.html
-  if (pathname === "/" || pathname === "") {
-    let indexHtml = await Deno.readTextFile(`${Deno.cwd()}/index.html`);
-
-    // Replace API_BASE with environment variable or fallback to current origin
-    const apiUrl = Deno.env.get("API_BASE_URL") || `https://${ctx.request.url.host}`;
-    console.log(`Injecting API_BASE: ${apiUrl}`);
-
-    // Use a more flexible replacement to handle whitespace variations
-    indexHtml = indexHtml.replace(
-      /const API_BASE = window\.location\.origin;/g,
-      `const API_BASE = "${apiUrl}";`
-    );
-
-    ctx.response.body = indexHtml;
-    ctx.response.type = "text/html";
-  } else {
-    // Serve other static files normally
-    await send(ctx, pathname, {
-      root: `${Deno.cwd()}`,
-    });
-  }
-});
-
-// Start the server
-const port = parseInt(Deno.env.get("PORT") || "8000");
-const API_BASE_URL = Deno.env.get("API_BASE_URL");
-const API_KEY = Deno.env.get("API_KEY");
-
-console.log(`Server running on http://localhost:${port}`);
-console.log("API Configuration:");
-console.log(`  - API_BASE_URL: ${API_BASE_URL || "未设置"}`);
-console.log(`  - API_KEY: ${API_KEY ? API_KEY.slice(0, 10) + "..." : "未设置"}`);
-
-await app.listen({ port });
-
-// Helper function to serve static files
-async function send(ctx, pathname, options) {
-  const filePath = pathname === "/" ? "/index.html" : pathname;
-
-  try {
-    const fullPath = options.root + filePath;
-    const fileInfo = await Deno.stat(fullPath);
-
-    if (fileInfo.isDirectory) {
-      // If it's a directory, try to serve index.html
-      const indexPath = fullPath.endsWith("/") ? fullPath + "index.html" : fullPath + "/index.html";
-      await sendFile(ctx, indexPath, { ...options, isIndexPath: true });
-    } else {
-      // It's a file, serve it directly
-      await sendFile(ctx, fullPath, options);
-    }
-  } catch (e) {
-    if (e instanceof Deno.errors.NotFound) {
-      // Default to index.html for SPA routing
-      await sendFile(ctx, options.root + "/index.html", { ...options, isIndexPath: true });
-    } else {
-      throw e;
-    }
-  }
-}
-
-// Function to send a file
-async function sendFile(ctx, filePath, options) {
-  const fileInfo = await Deno.stat(filePath);
-  const file = await Deno.open(filePath);
-
-  ctx.response.body = file.readable;
-
-  // Set MIME type based on file extension
-  const ext = filePath.split('.').pop();
-  const types = {
-    "html": "text/html",
-    "js": "application/javascript",
-    "css": "text/css",
-    "json": "application/json",
-    "png": "image/png",
-    "jpg": "image/jpeg",
-    "jpeg": "image/jpeg",
-    "gif": "image/gif",
-    "svg": "image/svg+xml",
-    "ico": "image/x-icon"
-  };
-
-  ctx.response.type = types[ext] || "application/octet-stream";
-  ctx.response.headers.set("Content-Length", fileInfo.size.toString());
-
-  // Add cache control for static assets
-  if (ext !== "html") {
-    ctx.response.headers.set("Cache-Control", "max-age=3600");
-  }
-}
-
-// Function to get MIME type based on file extension
-function getType(pathname) {
-  const ext = pathname.split('.').pop();
-  const types = {
-    "html": "text/html",
-    "js": "application/javascript",
-    "css": "text/css",
-    "json": "application/json",
-    "png": "image/png",
-    "jpg": "image/jpeg",
-    "gif": "image/gif",
-    "svg": "image/svg+xml",
-    "ico": "image/x-icon"
-  };
-  return types[ext] || "application/octet-stream";
->>>>>>> 29a666f (feat: Enhance Feishu integration with real-time logs, duplicate check, and better URL extraction)
 }

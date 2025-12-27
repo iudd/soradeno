@@ -70,7 +70,7 @@ async function loadFeishuTasks() {
         if (pending.length > 0) {
             html += '<h4 style="color:#f59e0b;margin:12px 0 8px;">⏳ 待生成</h4>';
             pending.forEach(t => {
-                const p = t.prompt.length > 60 ? t.prompt.slice(0, 60) + '...' : t.prompt;
+                const p = t.prompt || '(无)';
                 const typeIcon = t.generationType === '图片生成' ? '🖼️' : '🎬';
                 const imageIcon = t.soraImage ? '🖼️' : '';
 
@@ -88,7 +88,7 @@ async function loadFeishuTasks() {
         if (done.length > 0) {
             html += '<h4 style="color:#10b981;margin:16px 0 8px;">✅ 已完成</h4>';
             done.slice(0, 5).forEach(t => {
-                const p = t.prompt ? (t.prompt.length > 60 ? t.prompt.slice(0, 60) + '...' : t.prompt) : '(无)';
+                const p = t.prompt || '(无)';
                 const typeIcon = t.generationType === '图片生成' ? '🖼️' : '🎬';
                 const imageIcon = t.soraImage ? '🖼️' : '';
 

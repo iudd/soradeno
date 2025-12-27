@@ -1118,14 +1118,41 @@
                                 streamOutput.textContent += content;
                                 streamOutput.scrollTop = streamOutput.scrollHeight;
 
-                                // Extract media URL
-                                const urlMatch = content.match(/https?:\/\/[^\s\)]+/);
-                                if (urlMatch) {
-                                    mediaUrl = urlMatch[0];
+                                // Robust URL extraction logic
+                                const urlPatterns = [
+                                    /https?:\/\/[^\s<>"']+/g,
+                                    /(?:https?:\/\/)?[^\s<>"']*\.(?:mp4|webm|mov|avi)[^\s<>"']*/gi,
+                                    /(?:https?:\/\/)?[^\s<>"']*(?:video|media|cdn)[^\s<>"']*\.(?:mp4|webm|mov|avi)[^\s<>"']*/gi
+                                ];
+
+                                for (const pattern of urlPatterns) {
+                                    const matches = content.match(pattern);
+                                    if (matches) {
+                                        for (const match of matches) {
+                                            let fullUrl = match;
+                                            if (!fullUrl.startsWith('http')) {
+                                                fullUrl = 'https://' + fullUrl;
+                                            }
+                                            // Validate it looks like a video URL
+                                            if (fullUrl.match(/\.(mp4|webm|mov|avi)(\?|$)/i) ||
+                                                fullUrl.includes('video') ||
+                                                fullUrl.includes('media') ||
+                                                fullUrl.includes('cdn')) {
+                                                mediaUrl = fullUrl;
+                                                console.log("Found video URL:", mediaUrl);
+                                                break;
+                                            }
+                                        }
+                                        if (mediaUrl) break;
+                                    }
                                 }
                             }
                         } catch (e) {
                             console.error('Parse error:', e);
+                            // If JSON parse fails, try to display raw data for debugging if it looks like text
+                            if (data.trim().length > 0 && !data.includes('[DONE]')) {
+                                streamOutput.textContent += `\n[Raw]: ${data}\n`;
+                            }
                         }
                     }
                 }

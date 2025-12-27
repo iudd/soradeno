@@ -14,7 +14,7 @@ export class FeishuService {
         this.appSecret = Deno.env.get("FEISHU_APP_SECRET") || "";
         this.appToken = Deno.env.get("FEISHU_APP_TOKEN") || "";
         this.tableId = Deno.env.get("FEISHU_TABLE_ID") || "";
-        
+
         // 调试日志
         console.log("[Feishu] 配置信息:");
         console.log(`  - APP_ID: ${this.appId ? this.appId.slice(0, 10) + "..." : "未设置"}`);
@@ -183,24 +183,24 @@ export class FeishuService {
         if (!soraImageToken) {
             throw new Error("缺少图片token");
         }
-        
+
         const token = await this.getTenantAccessToken();
-        
+
         const url = `https://open.feishu.cn/open-apis/drive/v1/files/${soraImageToken}/download`;
-        
+
         const response = await fetch(url, {
             method: "GET",
             headers: {
                 "Authorization": `Bearer ${token}`,
             },
         });
-        
+
         const data = await response.json();
-        
+
         if (data.code !== 0) {
             throw new Error(`获取图片URL失败: ${data.msg}`);
         }
-        
+
         return data.data.download_url || data.data.url;
     }
 
@@ -232,8 +232,8 @@ export class FeishuService {
                     text: "查看图片",
                 };
             }
-            // 使用飞书API期望的Unix时间戳格式
-            fields["生成时间"] = Math.floor(Date.now() / 1000);
+            // 使用飞书API期望的Unix时间戳格式 (毫秒)
+            fields["生成时间"] = Date.now();
         }
 
         if (status === "失败" && error) {
@@ -269,16 +269,16 @@ export class FeishuService {
         if (!modelField) {
             return "sora-video-portrait-10s";
         }
-        
+
         const modelStr = String(modelField);
-        
+
         // 如果包含括号说明，提取前面的模型ID
         // 例如: "sora-video-portrait-10s（竖屏10秒）" -> "sora-video-portrait-10s"
         const match = modelStr.match(/^(sora-[a-z0-9-]+)/i);
         if (match) {
             return match[1];
         }
-        
+
         return modelStr;
     }
 
@@ -298,7 +298,7 @@ export class FeishuService {
         imageUrl?: string;
     } {
         const fields = record.fields || {};
-        
+
         // 获取提示词，确保是字符串
         let prompt = "";
         if (fields["提示词"]) {
@@ -306,26 +306,26 @@ export class FeishuService {
                 prompt = fields["提示词"];
             } else if (Array.isArray(fields["提示词"])) {
                 // 飞书多行文本可能是数组
-                prompt = fields["提示词"].map((item: any) => 
+                prompt = fields["提示词"].map((item: any) =>
                     typeof item === "string" ? item : (item.text || "")
                 ).join("");
             } else if (typeof fields["提示词"] === "object" && fields["提示词"].text) {
                 prompt = fields["提示词"].text;
             }
         }
-        
+
         // 获取角色
         let character = undefined;
         if (fields["角色"]) {
             if (typeof fields["角色"] === "string") {
                 character = fields["角色"];
             } else if (Array.isArray(fields["角色"])) {
-                character = fields["角色"].map((item: any) => 
+                character = fields["角色"].map((item: any) =>
                     typeof item === "string" ? item : (item.text || "")
                 ).join("");
             }
         }
-        
+
         // 尝试获取视频URL
         let videoUrl = undefined;
         if (fields["视频URL"]) {
@@ -335,7 +335,7 @@ export class FeishuService {
                 videoUrl = fields["视频URL"].link;
             }
         }
-        
+
         // 尝试获取图片URL
         let imageUrl = undefined;
         if (fields["图片URL"]) {
@@ -345,7 +345,7 @@ export class FeishuService {
                 imageUrl = fields["图片URL"].link;
             }
         }
-        
+
         // 尝试获取Sora图片
         let soraImage = undefined;
         if (fields["Sora图片"]) {
@@ -366,11 +366,11 @@ export class FeishuService {
                 soraImage = fields["Sora图片"].file_token;
             }
         }
-        
+
         // 获取模型名称
         const modelDisplay = fields["模型"] || "sora-video-portrait-10s";
         const model = this.parseModelName(fields["模型"]);
-        
+
         // 获取生成类型
         const generationType = fields["生成类型"] || "视频生成";
 

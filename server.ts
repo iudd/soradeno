@@ -438,7 +438,7 @@ async function sendFile(ctx: any, filePath: string, options: any) {
 
   // Add cache control for static assets
   if (ext !== "html") {
-    ctx.response.headers.set("Cache-Control", "max-age=3600");
+    ctx.response.headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
   }
 }
 

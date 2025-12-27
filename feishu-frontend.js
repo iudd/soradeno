@@ -1,4 +1,5 @@
 // Feishu Frontend - 飞书批量生成前端逻辑
+console.log('%c🚀 Feishu Frontend v2.0 (Dashboard Overhaul) Loaded at ' + new Date().toLocaleTimeString(), 'color: #6366f1; font-weight: bold; font-size: 14px;');
 let feishuTasks = [];
 let isProcessing = false; // 全局锁，防止同时运行多个任务
 
@@ -71,6 +72,7 @@ function updateFeishuStatus(msg, type) {
 }
 
 async function loadFeishuTasks() {
+    console.log('🔄 loadFeishuTasks called');
     const list = document.getElementById('feishuTaskList');
     const btn = document.getElementById('batchGenerateBtn');
     list.innerHTML = '<p style="text-align:center;padding:2rem;">加载中...</p>';

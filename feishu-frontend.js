@@ -74,13 +74,21 @@ async function loadFeishuTasks() {
                 const typeIcon = t.generationType === '图片生成' ? '🖼️' : '🎬';
                 const imageIcon = t.soraImage ? '🖼️' : '';
 
+                const characterInfo = t.character ? `<span style="background:#334155;padding:2px 6px;border-radius:4px;color:#e2e8f0;margin-right:6px;">👤 ${t.character}</span>` : '';
+                const statusColor = t.status === '失败' ? '#ef4444' : '#94a3b8';
+
                 html += `<div class="history-item" id="task-${t.recordId}" style="margin-bottom:8px;">
                     <div style="flex:1;">
-                        <div style="font-weight:500;">${p}</div>
-                        <div style="font-size:12px;color:#94a3b8;">${typeIcon} ${t.model} ${imageIcon}</div>
-                        ${t.soraImage ? `<div style="font-size:11px;color:#6366f1;">含参考图片</div>` : ''}
+                        <div style="font-weight:500;margin-bottom:6px;">${p}</div>
+                        <div style="font-size:12px;color:#94a3b8;display:flex;flex-wrap:wrap;align-items:center;gap:8px;">
+                            ${characterInfo}
+                            <span>${typeIcon} ${t.modelDisplay || t.model}</span>
+                            <span style="color:${statusColor}">[${t.status}]</span>
+                            ${imageIcon}
+                        </div>
+                        ${t.soraImage ? `<div style="font-size:11px;color:#6366f1;margin-top:4px;">🔗 含参考图片</div>` : ''}
                     </div>
-                    <button class="btn btn-primary" id="btn-${t.recordId}" onclick="genTask('${t.recordId}')" style="padding:6px 12px;font-size:13px;">生成</button>
+                    <button class="btn btn-primary" id="btn-${t.recordId}" onclick="genTask('${t.recordId}')" style="padding:6px 12px;font-size:13px;white-space:nowrap;">生成</button>
                 </div>`;
             });
         }
@@ -100,11 +108,18 @@ async function loadFeishuTasks() {
                     mediaButton = `<a href="${t.imageUrl}" target="_blank" class="btn btn-secondary" style="padding:6px 12px;font-size:13px;">查看</a>`;
                 }
 
+                const characterInfo = t.character ? `<span style="background:#334155;padding:2px 6px;border-radius:4px;color:#e2e8f0;margin-right:6px;">👤 ${t.character}</span>` : '';
+
                 html += `<div class="history-item" style="margin-bottom:8px;border-color:#10b981;">
                     <div style="flex:1;">
-                        <div style="font-weight:500;">${p}</div>
-                        <div style="font-size:12px;color:#94a3b8;">${typeIcon} ${t.status} ${imageIcon}</div>
-                        ${t.soraImage ? `<div style="font-size:11px;color:#6366f1;">含参考图片</div>` : ''}
+                        <div style="font-weight:500;margin-bottom:6px;">${p}</div>
+                        <div style="font-size:12px;color:#94a3b8;display:flex;flex-wrap:wrap;align-items:center;gap:8px;">
+                            ${characterInfo}
+                            <span>${typeIcon} ${t.modelDisplay || t.model}</span>
+                            <span style="color:#10b981">[${t.status}]</span>
+                            ${imageIcon}
+                        </div>
+                        ${t.soraImage ? `<div style="font-size:11px;color:#6366f1;margin-top:4px;">🔗 含参考图片</div>` : ''}
                     </div>
                     ${mediaButton}
                 </div>`;

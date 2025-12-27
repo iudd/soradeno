@@ -10,6 +10,16 @@ function getFeishuStreamEl() {
         el.className = 'stream-output';
         el.style.display = 'none';
         el.style.marginBottom = '1rem';
+        el.style.whiteSpace = 'pre-wrap';
+        el.style.wordBreak = 'break-word';
+        el.style.maxHeight = '300px';
+        el.style.overflowY = 'auto';
+        el.style.background = '#1e293b';
+        el.style.padding = '10px';
+        el.style.borderRadius = '8px';
+        el.style.fontFamily = 'monospace';
+        el.style.fontSize = '12px';
+        el.style.color = '#e2e8f0';
         list.parentNode.insertBefore(el, list);
     }
     return el;

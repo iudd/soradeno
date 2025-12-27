@@ -1,44 +1,73 @@
 // Feishu Frontend - 飞书批量生成前端逻辑
 let feishuTasks = [];
+let isProcessing = false; // 全局锁，防止同时运行多个任务
 
 function getFeishuStreamEl() {
     let el = document.getElementById('feishuStreamOutput');
     if (!el) {
-        const list = document.getElementById('feishuTaskList');
         el = document.createElement('div');
         el.id = 'feishuStreamOutput';
-        el.className = 'stream-output';
-        el.style.display = 'none';
-        el.style.marginBottom = '1rem';
-        el.style.whiteSpace = 'pre-wrap';
-        el.style.wordBreak = 'break-word';
-        el.style.maxHeight = '300px';
-        el.style.overflowY = 'auto';
-        el.style.background = '#1e293b';
-        el.style.padding = '10px';
-        el.style.borderRadius = '8px';
-        el.style.fontFamily = 'monospace';
-        el.style.fontSize = '12px';
-        el.style.color = '#e2e8f0';
-        list.parentNode.insertBefore(el, list);
+        el.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 450px;
+            height: 80vh;
+            background: #0f172a;
+            color: #38bdf8;
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            z-index: 9999;
+            font-family: 'Fira Code', monospace;
+            font-size: 12px;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #334155;
+        `;
+
+        const header = document.createElement('div');
+        header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;border-bottom:1px solid #334155;padding-bottom:8px;';
+        header.innerHTML = '<span style="font-weight:bold;color:#f1f5f9;">🚀 上游实时反馈控制台</span>';
+
+        const closeBtn = document.createElement('button');
+        closeBtn.innerText = '×';
+        closeBtn.style.cssText = 'background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer;';
+        closeBtn.onclick = () => el.style.display = 'none';
+        header.appendChild(closeBtn);
+
+        const content = document.createElement('div');
+        content.id = 'feishuStreamContent';
+        content.style.cssText = 'flex:1;overflow-y:auto;white-space:pre-wrap;word-break:break-all;line-height:1.5;';
+
+        el.appendChild(header);
+        el.appendChild(content);
+        document.body.appendChild(el);
     }
     return el;
 }
 
 function updateFeishuStatus(msg, type) {
-    let el = document.getElementById('feishuLog');
-    if (!el) {
-        const list = document.getElementById('feishuTaskList');
-        el = document.createElement('div');
-        el.id = 'feishuLog';
-        el.style.cssText = 'background:#0f172a;border-radius:8px;padding:12px;margin-bottom:12px;border-left:4px solid #6366f1;max-height:200px;overflow-y:auto;';
-        list.parentNode.insertBefore(el, list);
-    }
-    const colors = { info: '#6366f1', success: '#10b981', error: '#ef4444', warning: '#f59e0b' };
-    el.style.borderLeftColor = colors[type] || colors.info;
-    el.style.display = 'block';
+    const streamEl = getFeishuStreamEl();
+    const contentEl = document.getElementById('feishuStreamContent');
+    streamEl.style.display = 'flex';
+
     const time = new Date().toLocaleTimeString('zh-CN');
-    el.innerHTML = `<div style="font-size:13px;color:#94a3b8;">[${time}] ${msg}</div>` + el.innerHTML;
+    const colors = { info: '#38bdf8', success: '#10b981', error: '#ef4444', warning: '#f59e0b' };
+    const color = colors[type] || '#94a3b8';
+
+    const logLine = document.createElement('div');
+    logLine.style.color = color;
+    logLine.style.marginBottom = '4px';
+    logLine.innerHTML = `<span style="color:#64748b;">[${time}]</span> ${msg}`;
+    contentEl.appendChild(logLine);
+    contentEl.scrollTop = contentEl.scrollHeight;
+
+    // 同时更新原有的日志区域（如果存在）
+    let el = document.getElementById('feishuLog');
+    if (el) {
+        el.innerHTML = `<div style="font-size:13px;color:#94a3b8;">[${time}] ${msg}</div>` + el.innerHTML;
+    }
 }
 
 async function loadFeishuTasks() {
@@ -136,14 +165,27 @@ async function loadFeishuTasks() {
 }
 
 async function genTask(id) {
+    if (isProcessing) {
+        updateFeishuStatus('⚠️ 正在处理其他任务，请稍候...', 'warning');
+        return false;
+    }
+
+    isProcessing = true;
     const btn = document.getElementById('btn-' + id);
     const task = feishuTasks.find(t => t.recordId === id);
     if (btn) { btn.disabled = true; btn.innerHTML = '...'; }
-    updateFeishuStatus(`开始生成: ${task ? task.prompt.slice(0, 30) : id}...`, 'info');
 
     const streamEl = getFeishuStreamEl();
-    streamEl.style.display = 'block';
-    streamEl.innerHTML = ''; // Clear previous logs
+    const contentEl = document.getElementById('feishuStreamContent');
+    streamEl.style.display = 'flex';
+
+    // 添加任务分割线
+    const separator = document.createElement('div');
+    separator.style.cssText = 'border-top:1px dashed #334155;margin:15px 0;padding-top:10px;color:#f1f5f9;font-weight:bold;';
+    separator.innerHTML = `📍 任务: ${id}`;
+    contentEl.appendChild(separator);
+
+    updateFeishuStatus(`开始生成: ${task ? task.prompt.slice(0, 30) : id}...`, 'info');
 
     try {
         const response = await fetch('/api/feishu/generate/' + id, {
@@ -161,6 +203,11 @@ async function genTask(id) {
         let success = false;
         let resultData = null;
 
+        // 创建一个专门用于显示流式内容的容器
+        const streamTextContainer = document.createElement('span');
+        streamTextContainer.style.color = '#e2e8f0';
+        contentEl.appendChild(streamTextContainer);
+
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
@@ -177,8 +224,9 @@ async function genTask(id) {
                         if (data.type === 'log') {
                             updateFeishuStatus(data.message, 'info');
                         } else if (data.type === 'stream') {
-                            streamEl.textContent += data.content;
-                            streamEl.scrollTop = streamEl.scrollHeight;
+                            // 实时打字机效果显示上游反馈
+                            streamTextContainer.textContent += data.content;
+                            contentEl.scrollTop = contentEl.scrollHeight;
                         } else if (data.type === 'result') {
                             success = data.success;
                             resultData = data;
@@ -197,12 +245,6 @@ async function genTask(id) {
                 updateFeishuStatus('⚠️ 任务已存在，跳过生成', 'warning');
             } else {
                 updateFeishuStatus('✅ 生成成功! 已同步到飞书', 'success');
-                // 根据生成类型显示不同的消息
-                if (resultData.generationType === '图片生成' && resultData.imageUrl) {
-                    updateFeishuStatus('🖼️ ' + resultData.imageUrl, 'success');
-                } else if (resultData.videoUrl) {
-                    updateFeishuStatus('🎬 ' + resultData.videoUrl, 'success');
-                }
             }
             if (btn) { btn.innerHTML = '✅'; btn.style.background = '#10b981'; }
             return true;
@@ -214,6 +256,8 @@ async function genTask(id) {
         updateFeishuStatus('❌ 失败: ' + e.message, 'error');
         if (btn) { btn.disabled = false; btn.innerHTML = '重试'; btn.style.background = '#ef4444'; }
         return false;
+    } finally {
+        isProcessing = false;
     }
 }
 

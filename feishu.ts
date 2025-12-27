@@ -296,6 +296,7 @@ export class FeishuService {
         createdTime?: string;
         videoUrl?: string;
         imageUrl?: string;
+        error?: string;
     } {
         const fields = record.fields || {};
 
@@ -368,11 +369,23 @@ export class FeishuService {
         }
 
         // 获取模型名称
-        const modelDisplay = fields["模型"] || "sora-video-portrait-10s";
-        const model = this.parseModelName(fields["模型"]);
+        let modelDisplay = "sora-video-portrait-10s";
+        if (fields["模型"]) {
+            modelDisplay = typeof fields["模型"] === "string" ? fields["模型"] : (fields["模型"].text || String(fields["模型"]));
+        }
+        const model = this.parseModelName(modelDisplay);
 
         // 获取生成类型
-        const generationType = fields["生成类型"] || "视频生成";
+        let generationType = "视频生成";
+        if (fields["生成类型"]) {
+            generationType = typeof fields["生成类型"] === "string" ? fields["生成类型"] : (fields["生成类型"].text || String(fields["生成类型"]));
+        }
+
+        // 获取生成状态
+        let status = "待生成";
+        if (fields["生成状态"]) {
+            status = typeof fields["生成状态"] === "string" ? fields["生成状态"] : (fields["生成状态"].text || String(fields["生成状态"]));
+        }
 
         return {
             recordId: record.record_id,
@@ -382,11 +395,12 @@ export class FeishuService {
             modelDisplay: modelDisplay,
             generationType: generationType,
             soraImage: soraImage,
-            status: fields["生成状态"] || "待生成",
+            status: status,
             isGenerated: fields["是否已生成"] || false,
             createdTime: fields["生成时间"] ? new Date(fields["生成时间"]).toLocaleString("zh-CN") : undefined,
             videoUrl: videoUrl,
             imageUrl: imageUrl,
+            error: fields["错误信息"] || "",
         };
     }
 }

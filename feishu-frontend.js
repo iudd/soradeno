@@ -90,43 +90,66 @@ async function loadFeishuTasks() {
         updateFeishuStatus(`加载完成: ${all.length}条, 待生成${pending.length}, 已完成${done.length}`, 'success');
         btn.disabled = pending.length === 0;
 
-        let html = `<div style="background:#0f172a;padding:12px;border-radius:8px;margin-bottom:12px;">
-            <span style="color:#94a3b8;">总计:<strong style="color:#f1f5f9;">${all.length}</strong></span>
-            <span style="color:#f59e0b;margin-left:12px;">待生成:<strong>${pending.length}</strong></span>
-            <span style="color:#10b981;margin-left:12px;">已完成:<strong>${done.length}</strong></span>
+        let html = `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; background:#1e293b; padding:15px; border-radius:12px; border:1px solid #334155;">
+            <div style="display:flex; gap:20px;">
+                <div style="text-align:center;"><div style="color:#94a3b8; font-size:11px; text-transform:uppercase;">总计</div><div style="color:#f1f5f9; font-size:18px; font-weight:bold;">${all.length}</div></div>
+                <div style="text-align:center;"><div style="color:#f59e0b; font-size:11px; text-transform:uppercase;">待处理</div><div style="color:#f59e0b; font-size:18px; font-weight:bold;">${pending.length}</div></div>
+                <div style="text-align:center;"><div style="color:#10b981; font-size:11px; text-transform:uppercase;">已完成</div><div style="color:#10b981; font-size:18px; font-weight:bold;">${done.length}</div></div>
+            </div>
+            <button onclick="loadFeishuTasks()" class="btn btn-secondary" style="padding:8px 15px; font-size:13px; display:flex; align-items:center; gap:6px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"></path></svg>
+                刷新数据
+            </button>
         </div>`;
 
         if (pending.length > 0) {
-            html += '<h4 style="color:#f59e0b;margin:12px 0 8px;">⏳ 待生成</h4>';
+            html += '<h3 style="color:#f1f5f9; margin:25px 0 15px; font-size:16px; display:flex; align-items:center; gap:8px;">⏳ 待生成任务列表</h3>';
             pending.forEach(t => {
-                const p = t.prompt || '(无)';
-                const characterInfo = t.character ? `<div><span style="color:#94a3b8;">角色:</span> <span style="color:#e2e8f0;">${t.character}</span></div>` : '';
-                const modelInfo = `<div><span style="color:#94a3b8;">模型:</span> <span style="color:#e2e8f0;">${t.modelDisplay || t.model}</span></div>`;
-                const statusInfo = `<div><span style="color:#94a3b8;">状态:</span> <span style="color:${t.status === '失败' ? '#ef4444' : '#10b981'}; font-weight:bold;">${t.status}</span></div>`;
-                const timeInfo = t.createdTime ? `<div><span style="color:#94a3b8;">时间:</span> <span style="color:#e2e8f0;">${t.createdTime}</span></div>` : '';
-                const isGeneratedInfo = `<div><span style="color:#94a3b8;">已生成:</span> <span style="color:#e2e8f0;">${t.isGenerated ? '是' : '否'}</span></div>`;
-                const errorInfo = t.status === '失败' && t.error ? `<div style="color:#ef4444; font-size:11px; margin-top:4px; background:rgba(239,68,68,0.1); padding:4px; border-radius:4px;">❌ ${t.error}</div>` : '';
+                const p = t.prompt || '(无提示词)';
+                const errorDisplay = t.error ? `
+                    <div style="margin-top:12px; padding:10px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.2); border-radius:8px;">
+                        <div style="color:#ef4444; font-size:11px; font-weight:bold; margin-bottom:4px;">❌ 错误信息</div>
+                        <div style="color:#fca5a5; font-size:12px; font-family:monospace;">${t.error}</div>
+                    </div>` : '';
 
-                let mediaLinks = '';
-                if (t.videoUrl) mediaLinks += `<div style="margin-top:4px;"><span style="color:#94a3b8;">视频URL:</span> <a href="${t.videoUrl}" target="_blank" style="color:#6366f1; text-decoration:underline; font-size:11px; word-break:break-all;">${t.videoUrl}</a></div>`;
-                if (t.imageUrl) mediaLinks += `<div style="margin-top:4px;"><span style="color:#94a3b8;">图片URL:</span> <a href="${t.imageUrl}" target="_blank" style="color:#6366f1; text-decoration:underline; font-size:11px; word-break:break-all;">${t.imageUrl}</a></div>`;
-                if (t.soraImage) mediaLinks += `<div style="margin-top:4px;"><span style="color:#94a3b8;">Sora图片:</span> <span style="color:#94a3b8; font-size:11px; word-break:break-all;">${t.soraImage}</span></div>`;
-
-                html += `<div class="history-item" id="task-${t.recordId}" style="margin-bottom:12px; flex-direction:column; align-items:stretch; padding:12px; border:1px solid #334155; background:#0f172a;">
-                    <div style="margin-bottom:8px;">
-                        <div style="font-weight:600; color:#f1f5f9; margin-bottom:8px; border-bottom:1px solid #1e293b; padding-bottom:4px;">${p}</div>
-                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; font-size:12px;">
-                            ${characterInfo}
-                            ${modelInfo}
-                            ${statusInfo}
-                            ${isGeneratedInfo}
-                            ${timeInfo}
-                        </div>
-                        ${mediaLinks}
-                        ${errorInfo}
+                html += `
+                <div class="history-item" id="task-${t.recordId}" style="margin-bottom:20px; flex-direction:column; align-items:stretch; padding:20px; background:#0f172a; border:1px solid #334155; border-radius:12px; box-shadow:0 10px 15px -3px rgba(0,0,0,0.3);">
+                    <div style="border-bottom:1px solid #1e293b; padding-bottom:12px; margin-bottom:15px;">
+                        <div style="color:#94a3b8; font-size:11px; margin-bottom:6px; text-transform:uppercase;">提示词 (Prompt)</div>
+                        <div style="color:#f1f5f9; font-size:14px; line-height:1.6; font-weight:500;">${p}</div>
                     </div>
-                    <div style="display:flex; justify-content: flex-end; margin-top:8px; border-top:1px solid #1e293b; padding-top:8px;">
-                        <button class="btn btn-primary" id="btn-${t.recordId}" onclick="genTask('${t.recordId}')" style="padding:6px 16px; font-size:13px;">${t.status === '失败' ? '重试生成' : '开始生成'}</button>
+                    
+                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:15px; margin-bottom:15px;">
+                        <div><div style="color:#64748b; font-size:11px;">角色</div><div style="color:#e2e8f0; font-size:13px;">${t.character || '-'}</div></div>
+                        <div><div style="color:#64748b; font-size:11px;">模型</div><div style="color:#e2e8f0; font-size:13px;">${t.modelDisplay || t.model}</div></div>
+                        <div><div style="color:#64748b; font-size:11px;">生成状态</div><div style="color:${t.status === '失败' ? '#ef4444' : '#f59e0b'}; font-size:13px; font-weight:bold;">${t.status}</div></div>
+                        <div><div style="color:#64748b; font-size:11px;">是否已生成</div><div style="color:#e2e8f0; font-size:13px;">${t.isGenerated ? '✅ 是' : '❌ 否'}</div></div>
+                        <div><div style="color:#64748b; font-size:11px;">生成时间</div><div style="color:#e2e8f0; font-size:13px;">${t.createdTime || '-'}</div></div>
+                        <div><div style="color:#64748b; font-size:11px;">记录ID</div><div style="color:#475569; font-size:11px; font-family:monospace;">${t.recordId}</div></div>
+                    </div>
+
+                    <div style="background:#1e293b; padding:12px; border-radius:8px; display:flex; flex-direction:column; gap:8px;">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <span style="color:#94a3b8; font-size:11px; min-width:70px;">视频URL:</span>
+                            ${t.videoUrl ? `<a href="${t.videoUrl}" target="_blank" style="color:#6366f1; font-size:12px; text-decoration:underline; word-break:break-all;">${t.videoUrl}</a>` : '<span style="color:#475569; font-size:12px;">暂无</span>'}
+                        </div>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <span style="color:#94a3b8; font-size:11px; min-width:70px;">图片URL:</span>
+                            ${t.imageUrl ? `<a href="${t.imageUrl}" target="_blank" style="color:#6366f1; font-size:12px; text-decoration:underline; word-break:break-all;">${t.imageUrl}</a>` : '<span style="color:#475569; font-size:12px;">暂无</span>'}
+                        </div>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <span style="color:#94a3b8; font-size:11px; min-width:70px;">Sora图片:</span>
+                            <span style="color:#64748b; font-size:11px; word-break:break-all;">${t.soraImage || '无参考图'}</span>
+                        </div>
+                    </div>
+
+                    ${errorDisplay}
+
+                    <div style="margin-top:20px; display:flex; justify-content:flex-end;">
+                        <button class="btn btn-primary" id="btn-${t.recordId}" onclick="genTask('${t.recordId}')" style="padding:10px 25px; font-size:14px; font-weight:bold; box-shadow:0 4px 6px -1px rgba(99,102,241,0.4);">
+                            ${t.status === '失败' ? '🔄 重试生成' : '🎬 开始生成'}
+                        </button>
                     </div>
                 </div>`;
             });

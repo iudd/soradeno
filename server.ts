@@ -618,6 +618,14 @@ async function callVideoGenerationAPI(task: any, onProgress?: (chunk: string) =>
 
           try {
             const json = JSON.parse(data);
+
+            // Check for upstream errors in the stream
+            if (json.error) {
+              const errMsg = json.error.message || JSON.stringify(json.error);
+              console.error("Upstream API Error in stream:", errMsg);
+              throw new Error(`上游API错误: ${errMsg}`);
+            }
+
             const content = json.choices?.[0]?.delta?.content || '';
             allContent += content;
 

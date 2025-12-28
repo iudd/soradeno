@@ -221,124 +221,7 @@ router.get("/api/feishu/image/:imageToken", async (ctx) => {
   }
 });
 
-// Generate a single task
-router.post("/api/feishu/generate/:recordId", async (ctx) => {
-  const { recordId } = ctx.params;
-  if (!recordId) {
-    ctx.response.status = 400;
-    ctx.response.body = { error: "缺少记录ID" };
-    return;
-  }
-
-  // Set headers for SSE
-  ctx.response.headers.set("Content-Type", "text/event-stream");
-  ctx.response.headers.set("Cache-Control", "no-cache");
-  ctx.response.headers.set("Connection", "keep-alive");
-
-  const stream = new ReadableStream({
-    async start(controller) {
-      const encoder = new TextEncoder();
-      const send = (data: any) => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
-      };
-
-      try {
-        // Get the task details
-        const taskRecord = await feishuService.getTask(recordId);
-        const task = feishuService.parseTaskRecord(taskRecord);
-
-        // Check if already generated
-        if (task.isGenerated || task.status === "成功") {
-          send({ type: "log", message: "任务已生成，跳过重复生成" });
-          send({ type: "result", success: true, skipped: true, videoUrl: task.videoUrl, imageUrl: task.imageUrl });
-          controller.close();
-          return;
-        }
-
-        send({ type: "log", message: `开始生成任务: ${task.prompt.slice(0, 20)}...` });
-
-        // Update status to "生成中"
-        await feishuService.updateTaskStatus(recordId, "生成中");
-        send({ type: "log", message: "更新飞书状态为: 生成中" });
-
-        // Call the appropriate API based on the generation type
-        let response, mediaUrl, watermarkFreeUrl, googleDriveUrl;
-        const generationType = task.generationType || "视频生成";
-
-        if (generationType === "图片生成") {
-          // Call image generation API
-          send({ type: "log", message: "调用图片生成API..." });
-          response = await callImageGenerationAPI(task);
-          mediaUrl = response.imageUrl;
-        } else {
-          // Call video generation API (default)
-          send({ type: "log", message: "调用视频生成API..." });
-          response = await callVideoGenerationAPI(task, (chunk) => {
-            send({ type: "stream", content: chunk });
-          });
-          mediaUrl = response.videoUrl;
-          watermarkFreeUrl = response.watermarkFreeUrl;
-          googleDriveUrl = response.googleDriveUrl;
-        }
-
-        // Update the task with the result
-        if (mediaUrl || watermarkFreeUrl || googleDriveUrl) {
-          const urlsFound = [];
-          if (watermarkFreeUrl) urlsFound.push(`无水印URL: ${watermarkFreeUrl}`);
-          if (googleDriveUrl) urlsFound.push(`Google Drive URL: ${googleDriveUrl}`);
-          if (mediaUrl) urlsFound.push(`视频URL: ${mediaUrl}`);
-
-          send({ type: "log", message: `生成成功，获取到URL: ${urlsFound.join(', ')}` });
-
-          if (generationType === "图片生成") {
-            await feishuService.updateTaskStatus(recordId, "成功", undefined, mediaUrl);
-          } else {
-            await feishuService.updateTaskStatus(
-              recordId,
-              "成功",
-              mediaUrl,
-              undefined,
-              undefined,
-              watermarkFreeUrl,
-              googleDriveUrl
-            );
-          }
-          send({ type: "log", message: "已更新飞书任务状态和URL" });
-
-          send({
-            type: "result",
-            success: true,
-            generationType,
-            videoUrl: mediaUrl,
-            watermarkFreeUrl,
-            googleDriveUrl,
-            [generationType === "图片生成" ? "imageUrl" : "videoUrl"]: mediaUrl
-          });
-        } else {
-          throw new Error("生成失败：未返回媒体URL");
-        }
-
-      } catch (err) {
-        console.error("Generation error:", err);
-        send({ type: "error", message: err.message });
-
-        // Update the task status to failed
-        try {
-          await feishuService.updateTaskStatus(recordId, "失败", undefined, undefined, err.message);
-          send({ type: "log", message: "已更新飞书状态为: 失败" });
-        } catch (updateErr) {
-          console.error("Failed to update task status:", updateErr);
-        }
-      } finally {
-        controller.close();
-      }
-    }
-  });
-
-  ctx.response.body = stream;
-});
-
-// Batch generate tasks
+// Batch generate tasks (MUST be before the single task route to avoid matching "batch" as recordId)
 router.post("/api/feishu/generate/batch", async (ctx) => {
   let limit = 10;
   try {
@@ -456,6 +339,123 @@ router.post("/api/feishu/generate/batch", async (ctx) => {
       } catch (err) {
         console.error("Batch processing error:", err);
         send({ type: "error", message: err.message });
+      } finally {
+        controller.close();
+      }
+    }
+  });
+
+  ctx.response.body = stream;
+});
+
+// Generate a single task
+router.post("/api/feishu/generate/:recordId", async (ctx) => {
+  const { recordId } = ctx.params;
+  if (!recordId) {
+    ctx.response.status = 400;
+    ctx.response.body = { error: "缺少记录ID" };
+    return;
+  }
+
+  // Set headers for SSE
+  ctx.response.headers.set("Content-Type", "text/event-stream");
+  ctx.response.headers.set("Cache-Control", "no-cache");
+  ctx.response.headers.set("Connection", "keep-alive");
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const encoder = new TextEncoder();
+      const send = (data: any) => {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+      };
+
+      try {
+        // Get the task details
+        const taskRecord = await feishuService.getTask(recordId);
+        const task = feishuService.parseTaskRecord(taskRecord);
+
+        // Check if already generated
+        if (task.isGenerated || task.status === "成功") {
+          send({ type: "log", message: "任务已生成，跳过重复生成" });
+          send({ type: "result", success: true, skipped: true, videoUrl: task.videoUrl, imageUrl: task.imageUrl });
+          controller.close();
+          return;
+        }
+
+        send({ type: "log", message: `开始生成任务: ${task.prompt.slice(0, 20)}...` });
+
+        // Update status to "生成中"
+        await feishuService.updateTaskStatus(recordId, "生成中");
+        send({ type: "log", message: "更新飞书状态为: 生成中" });
+
+        // Call the appropriate API based on the generation type
+        let response, mediaUrl, watermarkFreeUrl, googleDriveUrl;
+        const generationType = task.generationType || "视频生成";
+
+        if (generationType === "图片生成") {
+          // Call image generation API
+          send({ type: "log", message: "调用图片生成API..." });
+          response = await callImageGenerationAPI(task);
+          mediaUrl = response.imageUrl;
+        } else {
+          // Call video generation API (default)
+          send({ type: "log", message: "调用视频生成API..." });
+          response = await callVideoGenerationAPI(task, (chunk) => {
+            send({ type: "stream", content: chunk });
+          });
+          mediaUrl = response.videoUrl;
+          watermarkFreeUrl = response.watermarkFreeUrl;
+          googleDriveUrl = response.googleDriveUrl;
+        }
+
+        // Update the task with the result
+        if (mediaUrl || watermarkFreeUrl || googleDriveUrl) {
+          const urlsFound = [];
+          if (watermarkFreeUrl) urlsFound.push(`无水印URL: ${watermarkFreeUrl}`);
+          if (googleDriveUrl) urlsFound.push(`Google Drive URL: ${googleDriveUrl}`);
+          if (mediaUrl) urlsFound.push(`视频URL: ${mediaUrl}`);
+
+          send({ type: "log", message: `生成成功，获取到URL: ${urlsFound.join(', ')}` });
+
+          if (generationType === "图片生成") {
+            await feishuService.updateTaskStatus(recordId, "成功", undefined, mediaUrl);
+          } else {
+            await feishuService.updateTaskStatus(
+              recordId,
+              "成功",
+              mediaUrl,
+              undefined,
+              undefined,
+              watermarkFreeUrl,
+              googleDriveUrl
+            );
+          }
+          send({ type: "log", message: "已更新飞书任务状态和URL" });
+
+          send({
+            type: "result",
+            success: true,
+            generationType,
+            videoUrl: mediaUrl,
+            watermarkFreeUrl,
+            googleDriveUrl,
+            [generationType === "图片生成" ? "imageUrl" : "videoUrl"]: mediaUrl
+          });
+        } else {
+          throw new Error("生成失败：未返回媒体URL");
+        }
+
+      } catch (err) {
+        console.error("Generation error:", err);
+        send({ type: "error", message: err.message });
+
+        // Update the task status to failed
+        try {
+          await feishuService.updateTaskStatus(recordId, "失败", undefined, undefined, err.message);
+          send({ type: "log", message: "已更新飞书状态为: 失败" });
+        } catch (updateErr) {
+          console.error("Failed to update task status:", updateErr);
+        }
       } finally {
         controller.close();
       }

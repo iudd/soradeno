@@ -1076,6 +1076,25 @@
 
         // Stream Generation
         async function streamGeneration(model, messages, streamOutput, resultDiv, type, prompt) {
+            // 清空输出区域
+            streamOutput.textContent = '';
+
+            // 日志辅助函数 - 输出到网页界面
+            const addLog = (msg, emoji = '📋') => {
+                const timestamp = new Date().toLocaleTimeString('zh-CN');
+                streamOutput.textContent += `[${timestamp}] ${emoji} ${msg}\n`;
+                streamOutput.scrollTop = streamOutput.scrollHeight;
+            };
+
+            addLog('开始调用 API', '🚀');
+            addLog(`模型: ${model}`, '📋');
+            addLog(`类型: ${type}`, '📋');
+            addLog(`提示词: ${prompt.substring(0, 50)}${prompt.length > 50 ? '...' : ''}`, '📋');
+            addLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', '');
+
+            console.log('🚀 [streamGeneration] 开始调用 API');
+            console.log('📋 [streamGeneration] 参数:', { model, messages, type, prompt });
+
             const response = await fetch(`${API_BASE}/v1/chat/completions`, {
                 method: 'POST',
                 headers: {
@@ -1088,18 +1107,34 @@
                 })
             });
 
+            addLog(`响应状态: ${response.status} ${response.statusText}`, '📡');
+            console.log('📡 [streamGeneration] 响应状态:', response.status, response.statusText);
+
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+                const errorText = await response.text();
+                addLog(`HTTP 错误: ${errorText}`, '❌');
+                console.error('❌ [streamGeneration] HTTP 错误:', errorText);
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
             }
 
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';
             let mediaUrl = null;
+            let reasoningContent = '';
+            let hasWatermarkWaiting = false;
+
+            addLog('开始读取 SSE 数据流...', '📖');
+            addLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', '');
+            console.log('📖 [streamGeneration] 开始读取 SSE 流...');
 
             while (true) {
                 const { done, value } = await reader.read();
-                if (done) break;
+                if (done) {
+                    addLog('数据流读取完成', '✅');
+                    console.log('✅ [streamGeneration] 流读取完成');
+                    break;
+                }
 
                 buffer += decoder.decode(value, { stream: true });
                 const lines = buffer.split('\n');
@@ -1108,51 +1143,119 @@
                 for (const line of lines) {
                     if (line.startsWith('data: ')) {
                         const data = line.slice(6);
-                        if (data === '[DONE]') continue;
+
+                        if (data === '[DONE]') {
+                            addLog('收到结束标志 [DONE]', '🏁');
+                            console.log('🏁 [streamGeneration] 收到 [DONE] 标志');
+                            continue;
+                        }
 
                         try {
                             const json = JSON.parse(data);
-                            const content = json.choices?.[0]?.delta?.content || '';
+                            console.log('📦 [streamGeneration] 解析到数据块:', json);
 
-                            if (content) {
-                                streamOutput.textContent += content;
-                                streamOutput.scrollTop = streamOutput.scrollHeight;
+                            const delta = json.choices?.[0]?.delta;
+                            const finishReason = json.choices?.[0]?.finish_reason;
 
-                                // Robust URL extraction logic
-                                const urlPatterns = [
-                                    /https?:\/\/[^\s<>"']+/g,
-                                    /(?:https?:\/\/)?[^\s<>"']*\.(?:mp4|webm|mov|avi)[^\s<>"']*/gi,
-                                    /(?:https?:\/\/)?[^\s<>"']*(?:video|media|cdn)[^\s<>"']*\.(?:mp4|webm|mov|avi)[^\s<>"']*/gi
-                                ];
+                            // 1. 处理 reasoning_content (进度状态)
+                            if (delta?.reasoning_content) {
+                                const cleanContent = delta.reasoning_content.replace(/\*\*/g, '').trim();
+                                if (cleanContent) {
+                                    addLog(cleanContent, '💭');
+                                }
+                                reasoningContent += delta.reasoning_content;
+                                console.log('💭 [reasoning_content]:', delta.reasoning_content);
+                            }
 
-                                for (const pattern of urlPatterns) {
-                                    const matches = content.match(pattern);
-                                    if (matches) {
-                                        for (const match of matches) {
-                                            let fullUrl = match;
-                                            if (!fullUrl.startsWith('http')) {
-                                                fullUrl = 'https://' + fullUrl;
+                            // 2. 处理无水印状态 (wm 对象)
+                            if (delta?.wm) {
+                                const wm = delta.wm;
+                                console.log('🔗 [wm 对象]:', wm);
+
+                                if (wm.stage === 'waiting') {
+                                    hasWatermarkWaiting = true;
+                                    addLog(`正在解析无水印视频... (第 ${wm.attempt || 0} 次尝试)`, '⏳');
+
+                                    if (wm.can_cancel) {
+                                        addLog(`可以取消等待 (task_id: ${wm.task_id})`, '⚠️');
+                                        console.log('⚠️ [wm] 可以取消等待，task_id:', wm.task_id);
+                                    }
+                                } else if (wm.stage === 'published') {
+                                    addLog('无水印视频已发布', '📢');
+                                } else if (wm.stage === 'ready') {
+                                    hasWatermarkWaiting = false;
+                                    addLog('无水印视频已就绪！', '✅');
+                                }
+                            }
+
+                            // 3. 处理最终结果 (output 字段 - 关键!)
+                            if (delta?.output && Array.isArray(delta.output) && delta.output.length > 0) {
+                                const outputItem = delta.output[0];
+                                console.log('🎯 [output] 获取到最终结果:', outputItem);
+
+                                if (outputItem.url) {
+                                    mediaUrl = outputItem.url;
+                                    addLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', '');
+                                    addLog('生成完成！', '🎉');
+                                    addLog(`类型: ${outputItem.type || type}`, '📦');
+                                    addLog(`任务ID: ${outputItem.task_id || 'N/A'}`, '🔖');
+                                    addLog(`最终URL: ${mediaUrl}`, '✨');
+                                    addLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', '');
+                                    console.log('✨ [最终URL]:', mediaUrl);
+                                }
+                            }
+
+                            // 4. 处理 content 字段 (可能包含 Markdown 格式的结果)
+                            if (delta?.content) {
+                                console.log('📝 [content]:', delta.content);
+
+                                // 如果还没有从 output 获取到 URL，尝试从 content 提取
+                                if (!mediaUrl) {
+                                    // 提取 URL 的多种模式
+                                    const urlPatterns = [
+                                        /https?:\/\/[^\s<>"'\)]+/g,
+                                        /src=['"]([^'"]+)['"]/g,
+                                        /\[([^\]]+)\]\(([^)]+)\)/g  // Markdown 链接格式
+                                    ];
+
+                                    for (const pattern of urlPatterns) {
+                                        const matches = [...delta.content.matchAll(pattern)];
+                                        if (matches.length > 0) {
+                                            for (const match of matches) {
+                                                let url = match[1] || match[2] || match[0];
+                                                url = url.trim().replace(/['">]/g, '');
+
+                                                // 验证是否是有效的媒体 URL
+                                                if (url.startsWith('http') && (
+                                                    url.includes('drive.google.com') ||
+                                                    url.includes('video') ||
+                                                    url.includes('media') ||
+                                                    url.match(/\.(mp4|webm|mov|avi|jpg|jpeg|png|gif)(\?|$)/i)
+                                                )) {
+                                                    mediaUrl = url;
+                                                    addLog('从 content 字段提取到 URL', '🔍');
+                                                    addLog(`URL: ${mediaUrl}`, '✨');
+                                                    console.log('🔍 [从 content 提取到 URL]:', mediaUrl);
+                                                    break;
+                                                }
                                             }
-                                            // Validate it looks like a video URL
-                                            if (fullUrl.match(/\.(mp4|webm|mov|avi)(\?|$)/i) ||
-                                                fullUrl.includes('video') ||
-                                                fullUrl.includes('media') ||
-                                                fullUrl.includes('cdn')) {
-                                                mediaUrl = fullUrl;
-                                                console.log("Found video URL:", mediaUrl);
-                                                break;
-                                            }
+                                            if (mediaUrl) break;
                                         }
-                                        if (mediaUrl) break;
                                     }
                                 }
                             }
-                        } catch (e) {
-                            console.error('Parse error:', e);
-                            // If JSON parse fails, try to display raw data for debugging if it looks like text
-                            if (data.trim().length > 0 && !data.includes('[DONE]')) {
-                                streamOutput.textContent += `\n[Raw]: ${data}\n`;
+
+                            // 5. 检查完成状态
+                            if (finishReason === 'STOP' || finishReason === 'stop') {
+                                addLog(`完成原因: ${finishReason}`, '🎬');
+                                console.log('🎬 [finish_reason] 生成完成:', finishReason);
                             }
+
+                        } catch (e) {
+                            addLog(`JSON 解析错误: ${e.message}`, '❌');
+                            addLog(`原始数据: ${data.substring(0, 100)}...`, '📄');
+                            console.error('❌ [streamGeneration] JSON 解析错误:', e);
+                            console.error('❌ [原始数据]:', data);
                         }
                     }
                 }

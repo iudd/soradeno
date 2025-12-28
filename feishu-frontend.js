@@ -190,7 +190,10 @@ async function loadFeishuTasks() {
 }
 
 async function genTask(id) {
+    console.log('🚀 [genTask] 开始生成任务:', id);
+
     if (isProcessing) {
+        console.warn('⚠️ [genTask] 已有任务在处理中，跳过');
         updateFeishuStatus('⚠️ 正在处理其他任务，请稍候...', 'warning');
         return false;
     }
@@ -198,6 +201,8 @@ async function genTask(id) {
     isProcessing = true;
     const btn = document.getElementById('btn-' + id);
     const task = feishuTasks.find(t => t.recordId === id);
+    console.log('📋 [genTask] 任务详情:', task);
+
     if (btn) { btn.disabled = true; btn.innerHTML = '...'; }
 
     const streamEl = getFeishuStreamEl();
@@ -213,12 +218,17 @@ async function genTask(id) {
     updateFeishuStatus(`开始生成: ${task ? task.prompt.slice(0, 30) : id}...`, 'info');
 
     try {
+        console.log('📡 [genTask] 发送 POST 请求到:', '/api/feishu/generate/' + id);
+
         const response = await fetch('/api/feishu/generate/' + id, {
             method: 'POST'
         });
 
+        console.log('📡 [genTask] 响应状态:', response.status, response.statusText);
+
         if (!response.ok) {
             const errorText = await response.text();
+            console.error('❌ [genTask] HTTP 错误:', errorText);
             throw new Error(errorText || response.statusText);
         }
 
@@ -233,9 +243,14 @@ async function genTask(id) {
         streamTextContainer.style.color = '#e2e8f0';
         contentEl.appendChild(streamTextContainer);
 
+        console.log('📖 [genTask] 开始读取 SSE 流...');
+
         while (true) {
             const { done, value } = await reader.read();
-            if (done) break;
+            if (done) {
+                console.log('✅ [genTask] 流读取完成');
+                break;
+            }
 
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split('\n\n');
@@ -245,6 +260,7 @@ async function genTask(id) {
                 if (line.startsWith('data: ')) {
                     try {
                         const data = JSON.parse(line.slice(6));
+                        console.log('📦 [genTask] 解析到数据:', data);
 
                         if (data.type === 'log') {
                             updateFeishuStatus(data.message, 'info');
@@ -255,11 +271,14 @@ async function genTask(id) {
                         } else if (data.type === 'result') {
                             success = data.success;
                             resultData = data;
+                            console.log('🎯 [genTask] 收到最终结果:', resultData);
                         } else if (data.type === 'error') {
+                            console.error('❌ [genTask] 收到错误:', data.message);
                             throw new Error(data.message);
                         }
                     } catch (e) {
-                        console.error('Parse error:', e);
+                        console.error('❌ [genTask] JSON 解析错误:', e);
+                        console.error('❌ [原始数据]:', line);
                     }
                 }
             }

@@ -784,18 +784,59 @@ async function callVideoGenerationAPI(task: any, onProgress?: (chunk: string) =>
             }
 
             const delta = json.choices?.[0]?.delta;
-            const content = delta?.content || '';
-            const reasoning = delta?.reasoning_content || '';
+            const finishReason = json.choices?.[0]?.finish_reason;
 
-            const combined = content + reasoning;
-            if (combined) {
-              allContent += combined;
-              if (onProgress) {
-                onProgress(combined);
+            // 1. Handle progress and reasoning
+            const reasoning = delta?.reasoning_content || '';
+            const progress = delta?.progress;
+
+            if (progress !== undefined && onProgress) {
+              onProgress(`[进度: ${(progress * 100).toFixed(1)}%]\n`);
+            }
+
+            if (reasoning && onProgress) {
+              onProgress(reasoning);
+            }
+
+            // 2. Handle structured output (Preferred)
+            if (delta?.output && Array.isArray(delta.output) && delta.output.length > 0) {
+              const outputItem = delta.output[0];
+              if (outputItem.url) {
+                const url = outputItem.url;
+                if (url.includes('drive.google.com')) {
+                  googleDriveUrl = url;
+                } else if (url.includes('oscdn2.dyysy.com') || url.includes('qushuiyin.me')) {
+                  watermarkFreeUrl = url;
+                } else {
+                  videoUrl = url;
+                }
+                console.log("Found URL in delta.output:", url);
               }
             }
 
-            // Periodically check allContent for URLs to handle split chunks
+            // 3. Handle content (Markdown/HTML/JSON)
+            const content = delta?.content || '';
+            if (content) {
+              allContent += content;
+              if (onProgress) {
+                onProgress(content);
+              }
+
+              // Check if content is a JSON string (Situation C: Character Creation)
+              if (content.trim().startsWith('{') && content.trim().endsWith('}')) {
+                try {
+                  const charData = JSON.parse(content);
+                  if (charData.event === 'character_card') {
+                    console.log("Found character card in content:", charData);
+                    // We can store this in allContent for later extraction if needed
+                  }
+                } catch (e) {
+                  // Not a valid JSON, continue with normal extraction
+                }
+              }
+            }
+
+            // 4. Periodically check allContent for URLs (Fallback)
             if (allContent.length > 0) {
               const urlMatches = allContent.match(/https?:\/\/[^\s<>"'\)\ ]+/g);
               if (urlMatches) {
@@ -803,31 +844,26 @@ async function callVideoGenerationAPI(task: any, onProgress?: (chunk: string) =>
                   let cleanUrl = url.replace(/[)\].,;]+$/, '');
 
                   if (cleanUrl.includes('drive.google.com')) {
-                    if (!googleDriveUrl) {
-                      googleDriveUrl = cleanUrl;
-                      console.log("Found Google Drive URL:", googleDriveUrl);
-                    }
+                    if (!googleDriveUrl) googleDriveUrl = cleanUrl;
                   } else if ((cleanUrl.includes('oscdn2.dyysy.com') || cleanUrl.includes('qushuiyin.me')) &&
                     cleanUrl.match(/\.mp4(\?|$)/i)) {
-                    if (!watermarkFreeUrl) {
-                      watermarkFreeUrl = cleanUrl;
-                      console.log("Found watermark-free URL:", watermarkFreeUrl);
-                    }
-                  } else if (cleanUrl.match(/\.(mp4|webm|mov|avi|m3u8|ts)(\?|$)/i) ||
+                    if (!watermarkFreeUrl) watermarkFreeUrl = cleanUrl;
+                  } else if (cleanUrl.match(/\.(mp4|webm|mov|avi|m3u8|ts|png|jpg|jpeg|gif)(\?|$)/i) ||
                     cleanUrl.includes('video') ||
                     cleanUrl.includes('media') ||
                     cleanUrl.includes('cdn')) {
-                    if (!videoUrl) {
-                      videoUrl = cleanUrl;
-                      console.log("Found video URL:", videoUrl);
-                    }
+                    if (!videoUrl) videoUrl = cleanUrl;
                   }
                 }
               }
             }
+
+            // 5. Check for completion
+            if (finishReason === 'STOP' || finishReason === 'stop') {
+              console.log("Generation finished with reason:", finishReason);
+            }
           } catch (e) {
             // If not valid JSON but starts with data:, it might be a partial JSON or plain text
-            allContent += trimmedLine;
             if (onProgress) onProgress(trimmedLine + "\n");
           }
         } else {

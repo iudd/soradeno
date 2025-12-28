@@ -1322,6 +1322,13 @@
                                 console.log('💭 [reasoning_content]:', delta.reasoning_content);
                             }
 
+                            // 1.1 处理 progress (数值进度)
+                            if (delta?.progress !== undefined) {
+                                const progressPercent = (delta.progress * 100).toFixed(1);
+                                addLog(`生成进度: ${progressPercent}%`, '📊');
+                                console.log('📊 [progress]:', progressPercent + '%');
+                            }
+
                             // 2. 处理无水印状态 (wm 对象)
                             if (delta?.wm) {
                                 const wm = delta.wm;
@@ -1343,17 +1350,20 @@
                                 }
                             }
 
-                            // 3. 处理最终结果 (output 字段)
+                            // 3. 处理最终结果 (output 字段) - 优先提取
                             if (delta?.output && Array.isArray(delta.output) && delta.output.length > 0) {
                                 const outputItem = delta.output[0];
                                 if (outputItem.url) {
                                     const url = outputItem.url;
                                     if (url.includes('drive.google.com')) {
                                         googleDriveUrl = url;
+                                        addLog('从 output 提取到 Google Drive URL', '🎯');
                                     } else if (url.includes('oscdn2.dyysy.com') || url.includes('qushuiyin.me')) {
                                         watermarkFreeUrl = url;
+                                        addLog('从 output 提取到无水印 URL', '🎯');
                                     } else {
                                         mediaUrl = url;
+                                        addLog('从 output 提取到媒体 URL', '🎯');
                                     }
                                     console.log('🎯 [output] 获取到 URL:', url);
                                 }
@@ -1364,7 +1374,17 @@
                                 fullContent += delta.content;
                                 console.log('📝 [content]:', delta.content);
 
-                                // 从累积的内容中提取所有 URL
+                                // 检查是否是 Situation C (Character JSON)
+                                if (delta.content.trim().startsWith('{') && delta.content.trim().endsWith('}')) {
+                                    try {
+                                        const charData = JSON.parse(delta.content);
+                                        if (charData.event === 'character_card') {
+                                            addLog(`角色创建成功: ${charData.card?.display_name || '未知'}`, '👤');
+                                        }
+                                    } catch (e) { }
+                                }
+
+                                // 从累积的内容中提取所有 URL (Fallback)
                                 const urlMatches = fullContent.match(/https?:\/\/[^\s<>"'\)\ ]+/g);
                                 if (urlMatches) {
                                     for (const url of urlMatches) {
@@ -1373,13 +1393,13 @@
                                         if (cleanUrl.includes('drive.google.com')) {
                                             if (!googleDriveUrl) {
                                                 googleDriveUrl = cleanUrl;
-                                                addLog('发现 Google Drive URL', '🔍');
+                                                addLog('从 content 发现 Google Drive URL', '🔍');
                                             }
                                         } else if ((cleanUrl.includes('oscdn2.dyysy.com') || cleanUrl.includes('qushuiyin.me')) &&
                                             cleanUrl.match(/\.mp4(\?|$)/i)) {
                                             if (!watermarkFreeUrl) {
                                                 watermarkFreeUrl = cleanUrl;
-                                                addLog('发现无水印视频 URL', '🔍');
+                                                addLog('从 content 发现无水印视频 URL', '🔍');
                                             }
                                         } else if (cleanUrl.match(/\.(mp4|webm|mov|avi|jpg|jpeg|png|gif)(\?|$)/i) ||
                                             cleanUrl.includes('video') ||
@@ -1387,7 +1407,7 @@
                                             cleanUrl.includes('cdn')) {
                                             if (!mediaUrl) {
                                                 mediaUrl = cleanUrl;
-                                                addLog('发现媒体 URL', '🔍');
+                                                addLog('从 content 发现媒体 URL', '🔍');
                                             }
                                         }
                                     }
@@ -1396,7 +1416,7 @@
 
                             // 5. 检查完成状态
                             if (finishReason === 'STOP' || finishReason === 'stop') {
-                                addLog(`完成原因: ${finishReason}`, '🎬');
+                                addLog(`生成完成 (原因: ${finishReason})`, '🎬');
                                 console.log('🎬 [finish_reason] 生成完成:', finishReason);
                             }
 

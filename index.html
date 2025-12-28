@@ -1275,6 +1275,9 @@
             let mediaUrl = null;
             let reasoningContent = '';
             let hasWatermarkWaiting = false;
+            let fullContent = '';
+            let watermarkFreeUrl = null;
+            let googleDriveUrl = null;
 
             addLog('开始读取 SSE 数据流...', '📖');
             addLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', '');
@@ -1340,58 +1343,52 @@
                                 }
                             }
 
-                            // 3. 处理最终结果 (output 字段 - 关键!)
+                            // 3. 处理最终结果 (output 字段)
                             if (delta?.output && Array.isArray(delta.output) && delta.output.length > 0) {
                                 const outputItem = delta.output[0];
-                                console.log('🎯 [output] 获取到最终结果:', outputItem);
-
                                 if (outputItem.url) {
-                                    mediaUrl = outputItem.url;
-                                    addLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', '');
-                                    addLog('生成完成！', '🎉');
-                                    addLog(`类型: ${outputItem.type || type}`, '📦');
-                                    addLog(`任务ID: ${outputItem.task_id || 'N/A'}`, '🔖');
-                                    addLog(`最终URL: ${mediaUrl}`, '✨');
-                                    addLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', '');
-                                    console.log('✨ [最终URL]:', mediaUrl);
+                                    const url = outputItem.url;
+                                    if (url.includes('drive.google.com')) {
+                                        googleDriveUrl = url;
+                                    } else if (url.includes('oscdn2.dyysy.com') || url.includes('qushuiyin.me')) {
+                                        watermarkFreeUrl = url;
+                                    } else {
+                                        mediaUrl = url;
+                                    }
+                                    console.log('🎯 [output] 获取到 URL:', url);
                                 }
                             }
 
-                            // 4. 处理 content 字段 (可能包含 Markdown 格式的结果)
+                            // 4. 处理 content 字段
                             if (delta?.content) {
+                                fullContent += delta.content;
                                 console.log('📝 [content]:', delta.content);
 
-                                // 如果还没有从 output 获取到 URL，尝试从 content 提取
-                                if (!mediaUrl) {
-                                    // 提取 URL 的多种模式
-                                    const urlPatterns = [
-                                        /https?:\/\/[^\s<>"'\)]+/g,
-                                        /src=['"]([^'"]+)['"]/g,
-                                        /\[([^\]]+)\]\(([^)]+)\)/g  // Markdown 链接格式
-                                    ];
+                                // 从累积的内容中提取所有 URL
+                                const urlMatches = fullContent.match(/https?:\/\/[^\s<>"'\)\ ]+/g);
+                                if (urlMatches) {
+                                    for (const url of urlMatches) {
+                                        let cleanUrl = url.replace(/[)\].,;]+$/, '');
 
-                                    for (const pattern of urlPatterns) {
-                                        const matches = [...delta.content.matchAll(pattern)];
-                                        if (matches.length > 0) {
-                                            for (const match of matches) {
-                                                let url = match[1] || match[2] || match[0];
-                                                url = url.trim().replace(/['">]/g, '');
-
-                                                // 验证是否是有效的媒体 URL
-                                                if (url.startsWith('http') && (
-                                                    url.includes('drive.google.com') ||
-                                                    url.includes('video') ||
-                                                    url.includes('media') ||
-                                                    url.match(/\.(mp4|webm|mov|avi|jpg|jpeg|png|gif)(\?|$)/i)
-                                                )) {
-                                                    mediaUrl = url;
-                                                    addLog('从 content 字段提取到 URL', '🔍');
-                                                    addLog(`URL: ${mediaUrl}`, '✨');
-                                                    console.log('🔍 [从 content 提取到 URL]:', mediaUrl);
-                                                    break;
-                                                }
+                                        if (cleanUrl.includes('drive.google.com')) {
+                                            if (!googleDriveUrl) {
+                                                googleDriveUrl = cleanUrl;
+                                                addLog('发现 Google Drive URL', '🔍');
                                             }
-                                            if (mediaUrl) break;
+                                        } else if ((cleanUrl.includes('oscdn2.dyysy.com') || cleanUrl.includes('qushuiyin.me')) &&
+                                            cleanUrl.match(/\.mp4(\?|$)/i)) {
+                                            if (!watermarkFreeUrl) {
+                                                watermarkFreeUrl = cleanUrl;
+                                                addLog('发现无水印视频 URL', '🔍');
+                                            }
+                                        } else if (cleanUrl.match(/\.(mp4|webm|mov|avi|jpg|jpeg|png|gif)(\?|$)/i) ||
+                                            cleanUrl.includes('video') ||
+                                            cleanUrl.includes('media') ||
+                                            cleanUrl.includes('cdn')) {
+                                            if (!mediaUrl) {
+                                                mediaUrl = cleanUrl;
+                                                addLog('发现媒体 URL', '🔍');
+                                            }
                                         }
                                     }
                                 }
@@ -1404,13 +1401,21 @@
                             }
 
                         } catch (e) {
-                            addLog(`JSON 解析错误: ${e.message}`, '❌');
-                            addLog(`原始数据: ${data.substring(0, 100)}...`, '📄');
                             console.error('❌ [streamGeneration] JSON 解析错误:', e);
-                            console.error('❌ [原始数据]:', data);
                         }
                     }
                 }
+            }
+
+            // 优先级排序: Google Drive > Watermark-free > Regular
+            const finalUrl = googleDriveUrl || watermarkFreeUrl || mediaUrl;
+            mediaUrl = finalUrl;
+
+            if (mediaUrl) {
+                addLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', '');
+                addLog('生成完成！', '🎉');
+                addLog(`最终URL: ${mediaUrl}`, '✨');
+                addLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', '');
             }
 
             // Display result

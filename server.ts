@@ -743,12 +743,18 @@ async function callVideoGenerationAPI(task: any, onProgress?: (chunk: string) =>
     const reader = response.body!.getReader();
     const decoder = new TextDecoder();
     let buffer = '', videoUrl = null, watermarkFreeUrl = null, googleDriveUrl = null, allContent = '';
+    let firstChunkReceived = false;
 
     console.log("Processing streaming response...");
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+
+      if (!firstChunkReceived) {
+        firstChunkReceived = true;
+        if (onProgress) onProgress("已连接到上游流，开始接收数据...\n");
+      }
 
       const chunk = decoder.decode(value, { stream: true });
       buffer += chunk;
@@ -757,9 +763,15 @@ async function callVideoGenerationAPI(task: any, onProgress?: (chunk: string) =>
       buffer = lines.pop() || '';
 
       for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6);
-          if (data === '[DONE]') continue;
+        const trimmedLine = line.trim();
+        if (!trimmedLine) continue;
+
+        if (trimmedLine.startsWith('data: ')) {
+          const data = trimmedLine.slice(6);
+          if (data === '[DONE]') {
+            if (onProgress) onProgress("\n[数据流传输结束]\n");
+            continue;
+          }
 
           try {
             const json = JSON.parse(data);
@@ -771,39 +783,37 @@ async function callVideoGenerationAPI(task: any, onProgress?: (chunk: string) =>
               throw new Error(`上游API错误: ${errMsg}`);
             }
 
-            const content = json.choices?.[0]?.delta?.content || '';
-            allContent += content;
+            const delta = json.choices?.[0]?.delta;
+            const content = delta?.content || '';
+            const reasoning = delta?.reasoning_content || '';
 
-            if (content && onProgress) {
-              onProgress(content);
+            const combined = content + reasoning;
+            if (combined) {
+              allContent += combined;
+              if (onProgress) {
+                onProgress(combined);
+              }
             }
 
-            // URL extraction logic for video URLs
-            if (content) {
-              // Extract all URLs from content
-              const urlMatches = content.match(/https?:\/\/[^\s<>"'\)\ ]+/g);
-
+            // Periodically check allContent for URLs to handle split chunks
+            if (allContent.length > 0) {
+              const urlMatches = allContent.match(/https?:\/\/[^\s<>"'\)\ ]+/g);
               if (urlMatches) {
                 for (const url of urlMatches) {
-                  let cleanUrl = url.replace(/[)\].,;]+$/, ''); // Clean trailing punctuation
+                  let cleanUrl = url.replace(/[)\].,;]+$/, '');
 
-                  // Identify watermark-free URLs (from oscdn2.dyysy.com or qushuiyin.me)
-                  if ((cleanUrl.includes('oscdn2.dyysy.com') || cleanUrl.includes('qushuiyin.me')) &&
+                  if (cleanUrl.includes('drive.google.com')) {
+                    if (!googleDriveUrl) {
+                      googleDriveUrl = cleanUrl;
+                      console.log("Found Google Drive URL:", googleDriveUrl);
+                    }
+                  } else if ((cleanUrl.includes('oscdn2.dyysy.com') || cleanUrl.includes('qushuiyin.me')) &&
                     cleanUrl.match(/\.mp4(\?|$)/i)) {
                     if (!watermarkFreeUrl) {
                       watermarkFreeUrl = cleanUrl;
                       console.log("Found watermark-free URL:", watermarkFreeUrl);
                     }
-                  }
-                  // Identify Google Drive URLs
-                  else if (cleanUrl.includes('drive.google.com')) {
-                    if (!googleDriveUrl) {
-                      googleDriveUrl = cleanUrl;
-                      console.log("Found Google Drive URL:", googleDriveUrl);
-                    }
-                  }
-                  // Regular video URLs
-                  else if (cleanUrl.match(/\.(mp4|webm|mov|avi)(\?|$)/i) ||
+                  } else if (cleanUrl.match(/\.(mp4|webm|mov|avi|m3u8|ts)(\?|$)/i) ||
                     cleanUrl.includes('video') ||
                     cleanUrl.includes('media') ||
                     cleanUrl.includes('cdn')) {
@@ -816,98 +826,52 @@ async function callVideoGenerationAPI(task: any, onProgress?: (chunk: string) =>
               }
             }
           } catch (e) {
-            // If not valid JSON, treat as plain text
-            allContent += line;
-
-            const urls = line.match(/https?:\/\/[^\s<>"']+/g);
-            if (urls) {
-              for (const url of urls) {
-                let cleanUrl = url.replace(/[)\].,;]+$/, '');
-
-                if ((cleanUrl.includes('oscdn2.dyysy.com') || cleanUrl.includes('qushuiyin.me')) &&
-                  cleanUrl.match(/\.mp4(\?|$)/i)) {
-                  if (!watermarkFreeUrl) {
-                    watermarkFreeUrl = cleanUrl;
-                    console.log("Found watermark-free URL in plain text:", watermarkFreeUrl);
-                  }
-                } else if (cleanUrl.includes('drive.google.com')) {
-                  if (!googleDriveUrl) {
-                    googleDriveUrl = cleanUrl;
-                    console.log("Found Google Drive URL in plain text:", googleDriveUrl);
-                  }
-                } else if (cleanUrl.match(/\.(mp4|webm|mov|avi|m3u8|ts)(\?|$)/i) ||
-                  cleanUrl.includes('video') ||
-                  cleanUrl.includes('media') ||
-                  cleanUrl.includes('cdn')) {
-                  if (!videoUrl) {
-                    videoUrl = cleanUrl;
-                    console.log("Found video URL in plain text:", videoUrl);
-                  }
-                }
-              }
-            }
+            // If not valid JSON but starts with data:, it might be a partial JSON or plain text
+            allContent += trimmedLine;
+            if (onProgress) onProgress(trimmedLine + "\n");
           }
-        } else if (line.trim()) {
-          // Handle non-SSE responses
-          allContent += line;
+        } else {
+          // Handle non-SSE lines or other formats
+          allContent += trimmedLine;
+          if (onProgress) onProgress(trimmedLine + "\n");
 
-          const urls = line.match(/https?:\/\/[^\s<>"']+/g);
-          if (urls) {
-            for (const url of urls) {
+          const urlMatches = allContent.match(/https?:\/\/[^\s<>"'\)\ ]+/g);
+          if (urlMatches) {
+            for (const url of urlMatches) {
               let cleanUrl = url.replace(/[)\].,;]+$/, '');
-
-              if ((cleanUrl.includes('oscdn2.dyysy.com') || cleanUrl.includes('qushuiyin.me')) &&
-                cleanUrl.match(/\.mp4(\?|$)/i)) {
-                if (!watermarkFreeUrl) {
-                  watermarkFreeUrl = cleanUrl;
-                  console.log("Found watermark-free URL in line:", watermarkFreeUrl);
-                }
-              } else if (cleanUrl.includes('drive.google.com')) {
-                if (!googleDriveUrl) {
-                  googleDriveUrl = cleanUrl;
-                  console.log("Found Google Drive URL in line:", googleDriveUrl);
-                }
-              } else if (cleanUrl.match(/\.(mp4|webm|mov|avi|m3u8|ts)(\?|$)/i) ||
-                cleanUrl.includes('video') ||
-                cleanUrl.includes('media') ||
-                cleanUrl.includes('cdn')) {
-                if (!videoUrl) {
-                  videoUrl = cleanUrl;
-                  console.log("Found video URL in line:", videoUrl);
-                }
+              if (cleanUrl.includes('drive.google.com')) {
+                if (!googleDriveUrl) googleDriveUrl = cleanUrl;
+              } else if ((cleanUrl.includes('oscdn2.dyysy.com') || cleanUrl.includes('qushuiyin.me')) && cleanUrl.match(/\.mp4/)) {
+                if (!watermarkFreeUrl) watermarkFreeUrl = cleanUrl;
+              } else if (cleanUrl.match(/\.(mp4|webm|mov|avi|m3u8|ts)/)) {
+                if (!videoUrl) videoUrl = cleanUrl;
               }
             }
-
           }
         }
       }
-
-      // Continue processing to collect all URL types
     }
 
-    // Final check on all collected content
+    // Final check on all collected content if nothing found yet
     if (!videoUrl && !watermarkFreeUrl && !googleDriveUrl) {
       console.error("No video URL found. Response Content length:", allContent.length);
-      // Only log last 500 chars to avoid log overflow
-      console.error("Content tail:", allContent.slice(-500));
-
-      // Try to find any video URL in the entire content
-      const allUrls = allContent.match(/https?:\/\/[^\s<>"']*\.(?:mp4|webm|mov|avi|m3u8|ts)[^\s<>"']*/gi);
-      if (allUrls && allUrls.length > 0) {
-        // Prioritize watermark-free URLs
-        const wmFree = allUrls.find(u => u.includes('oscdn2.dyysy.com') || u.includes('qushuiyin.me'));
-        if (wmFree) {
-          watermarkFreeUrl = wmFree;
-          console.log("Found watermark-free URL with final search:", watermarkFreeUrl);
-        } else {
-          videoUrl = allUrls[0];
-          console.log("Found video URL with final search:", videoUrl);
+      const allUrls = allContent.match(/https?:\/\/[^\s<>"'\)\ ]+/g);
+      if (allUrls) {
+        for (const url of allUrls) {
+          let cleanUrl = url.replace(/[)\].,;]+$/, '');
+          if (cleanUrl.includes('drive.google.com')) {
+            googleDriveUrl = cleanUrl;
+          } else if ((cleanUrl.includes('oscdn2.dyysy.com') || cleanUrl.includes('qushuiyin.me')) && cleanUrl.match(/\.mp4/)) {
+            watermarkFreeUrl = cleanUrl;
+          } else if (cleanUrl.match(/\.(mp4|webm|mov|avi|m3u8|ts)/)) {
+            videoUrl = cleanUrl;
+          }
         }
       }
     }
 
     if (!videoUrl && !watermarkFreeUrl && !googleDriveUrl) {
-      throw new Error(`API响应中未找到视频URL。`);
+      throw new Error(`API响应中未找到视频URL。接收到的总内容长度: ${allContent.length}`);
     }
 
     console.log("Final URLs:", { videoUrl, watermarkFreeUrl, googleDriveUrl });

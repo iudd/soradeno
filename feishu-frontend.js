@@ -9,41 +9,129 @@ function getFeishuStreamEl() {
         el = document.createElement('div');
         el.id = 'feishuStreamOutput';
         el.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            width: 450px;
-            height: 80vh;
-            background: #0f172a;
+            width: 100%;
+            max-width: 100%;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
             color: #38bdf8;
             padding: 15px;
-            border-radius: 12px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
-            z-index: 9999;
-            font-family: 'Fira Code', monospace;
-            font-size: 12px;
+            border-radius: 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            font-family: 'Fira Code', 'Courier New', monospace;
+            font-size: 13px;
             display: flex;
             flex-direction: column;
-            border: 1px solid #334155;
+            border-bottom: 2px solid #334155;
+            margin-bottom: 20px;
         `;
 
         const header = document.createElement('div');
-        header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;border-bottom:1px solid #334155;padding-bottom:8px;';
-        header.innerHTML = '<span style="font-weight:bold;color:#f1f5f9;">🚀 上游实时反馈控制台</span>';
+        header.style.cssText = `
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 8px;
+            flex-wrap: wrap;
+            gap: 10px;
+        `;
+        header.innerHTML = '<span style="font-weight:bold;color:#f1f5f9;font-size:14px;">🚀 上游实时反馈控制台</span>';
 
-        const closeBtn = document.createElement('button');
-        closeBtn.innerText = '×';
-        closeBtn.style.cssText = 'background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer;';
-        closeBtn.onclick = () => el.style.display = 'none';
-        header.appendChild(closeBtn);
+        const toggleBtn = document.createElement('button');
+        toggleBtn.innerText = '收起';
+        toggleBtn.style.cssText = `
+            background: rgba(99, 102, 241, 0.2);
+            border: 1px solid #6366f1;
+            color: #a5b4fc;
+            padding: 4px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s ease;
+        `;
+        toggleBtn.onmouseover = () => {
+            toggleBtn.style.background = 'rgba(99, 102, 241, 0.3)';
+        };
+        toggleBtn.onmouseout = () => {
+            toggleBtn.style.background = 'rgba(99, 102, 241, 0.2)';
+        };
 
         const content = document.createElement('div');
         content.id = 'feishuStreamContent';
-        content.style.cssText = 'flex:1;overflow-y:auto;white-space:pre-wrap;word-break:break-all;line-height:1.5;';
+        content.style.cssText = `
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            line-height: 1.6;
+            padding: 10px;
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 8px;
+            border: 1px solid #1e293b;
+        `;
+
+        // 移动端优化
+        const style = document.createElement('style');
+        style.textContent = `
+            @media (max-width: 768px) {
+                #feishuStreamOutput {
+                    padding: 10px !important;
+                    font-size: 11px !important;
+                    margin-bottom: 15px !important;
+                }
+                #feishuStreamContent {
+                    max-height: 250px !important;
+                    font-size: 11px !important;
+                    padding: 8px !important;
+                }
+                #feishuStreamOutput button {
+                    font-size: 11px !important;
+                    padding: 3px 10px !important;
+                }
+            }
+            #feishuStreamContent::-webkit-scrollbar {
+                width: 6px;
+            }
+            #feishuStreamContent::-webkit-scrollbar-track {
+                background: #1e293b;
+                border-radius: 3px;
+            }
+            #feishuStreamContent::-webkit-scrollbar-thumb {
+                background: #475569;
+                border-radius: 3px;
+            }
+            #feishuStreamContent::-webkit-scrollbar-thumb:hover {
+                background: #6366f1;
+            }
+        `;
+        document.head.appendChild(style);
+
+        toggleBtn.onclick = () => {
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                toggleBtn.innerText = '收起';
+            } else {
+                content.style.display = 'none';
+                toggleBtn.innerText = '展开';
+            }
+        };
+        header.appendChild(toggleBtn);
 
         el.appendChild(header);
         el.appendChild(content);
-        document.body.appendChild(el);
+
+        // 插入到飞书任务列表的顶部
+        const feishuTab = document.getElementById('feishu-tab');
+        if (feishuTab) {
+            const firstCard = feishuTab.querySelector('.card');
+            if (firstCard) {
+                firstCard.insertBefore(el, firstCard.firstChild);
+            } else {
+                feishuTab.insertBefore(el, feishuTab.firstChild);
+            }
+        } else {
+            document.body.insertBefore(el, document.body.firstChild);
+        }
     }
     return el;
 }

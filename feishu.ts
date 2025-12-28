@@ -223,31 +223,20 @@ export class FeishuService {
 
         if (status === "成功") {
             // 优先使用 Google Drive URL 填充视频URL字段
+            // 注意：飞书表格中这些字段是"多行文本"类型，只能存储纯文本字符串
             if (googleDriveUrl) {
-                fields["视频URL"] = {
-                    link: googleDriveUrl,
-                    text: "查看视频",
-                };
+                fields["视频URL"] = googleDriveUrl;
             } else if (videoUrl) {
-                fields["视频URL"] = {
-                    link: videoUrl,
-                    text: "查看视频",
-                };
+                fields["视频URL"] = videoUrl;
             }
 
             // 如果有无水印URL，填充到专门的字段
             if (watermarkFreeUrl) {
-                fields["无水印视频URL"] = {
-                    link: watermarkFreeUrl,
-                    text: "无水印视频",
-                };
+                fields["无水印视频URL"] = watermarkFreeUrl;
             }
 
             if (imageUrl) {
-                fields["图片URL"] = {
-                    link: imageUrl,
-                    text: "查看图片",
-                };
+                fields["图片URL"] = imageUrl;
             }
             // 使用飞书API期望的Unix时间戳格式 (毫秒)
             fields["生成时间"] = Date.now();

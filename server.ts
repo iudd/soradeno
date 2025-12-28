@@ -262,7 +262,7 @@ router.post("/api/feishu/generate/:recordId", async (ctx) => {
         send({ type: "log", message: "更新飞书状态为: 生成中" });
 
         // Call the appropriate API based on the generation type
-        let response, mediaUrl;
+        let response, mediaUrl, watermarkFreeUrl, googleDriveUrl;
         const generationType = task.generationType || "视频生成";
 
         if (generationType === "图片生成") {
@@ -277,16 +277,31 @@ router.post("/api/feishu/generate/:recordId", async (ctx) => {
             send({ type: "stream", content: chunk });
           });
           mediaUrl = response.videoUrl;
+          watermarkFreeUrl = response.watermarkFreeUrl;
+          googleDriveUrl = response.googleDriveUrl;
         }
 
         // Update the task with the result
-        if (mediaUrl) {
-          send({ type: "log", message: `生成成功，获取到URL: ${mediaUrl}` });
+        if (mediaUrl || watermarkFreeUrl || googleDriveUrl) {
+          const urlsFound = [];
+          if (watermarkFreeUrl) urlsFound.push(`无水印URL: ${watermarkFreeUrl}`);
+          if (googleDriveUrl) urlsFound.push(`Google Drive URL: ${googleDriveUrl}`);
+          if (mediaUrl) urlsFound.push(`视频URL: ${mediaUrl}`);
+
+          send({ type: "log", message: `生成成功，获取到URL: ${urlsFound.join(', ')}` });
 
           if (generationType === "图片生成") {
             await feishuService.updateTaskStatus(recordId, "成功", undefined, mediaUrl);
           } else {
-            await feishuService.updateTaskStatus(recordId, "成功", mediaUrl, undefined);
+            await feishuService.updateTaskStatus(
+              recordId,
+              "成功",
+              mediaUrl,
+              undefined,
+              undefined,
+              watermarkFreeUrl,
+              googleDriveUrl
+            );
           }
           send({ type: "log", message: "已更新飞书任务状态和URL" });
 
@@ -294,6 +309,9 @@ router.post("/api/feishu/generate/:recordId", async (ctx) => {
             type: "result",
             success: true,
             generationType,
+            videoUrl: mediaUrl,
+            watermarkFreeUrl,
+            googleDriveUrl,
             [generationType === "图片生成" ? "imageUrl" : "videoUrl"]: mediaUrl
           });
         } else {
@@ -311,6 +329,133 @@ router.post("/api/feishu/generate/:recordId", async (ctx) => {
         } catch (updateErr) {
           console.error("Failed to update task status:", updateErr);
         }
+      } finally {
+        controller.close();
+      }
+    }
+  });
+
+  ctx.response.body = stream;
+});
+
+// Batch generate tasks
+router.post("/api/feishu/generate/batch", async (ctx) => {
+  let limit = 10;
+  try {
+    const body = await ctx.request.body({ type: "json" }).value;
+    if (body && body.limit) {
+      limit = body.limit;
+    }
+  } catch (e) {
+    // Ignore body parsing error, use default limit
+  }
+
+  // Set headers for SSE
+  ctx.response.headers.set("Content-Type", "text/event-stream");
+  ctx.response.headers.set("Cache-Control", "no-cache");
+  ctx.response.headers.set("Connection", "keep-alive");
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const encoder = new TextEncoder();
+      const send = (data: any) => {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+      };
+
+      try {
+        send({ type: "log", message: `开始获取待生成任务 (限制: ${limit})...` });
+
+        // Get pending tasks
+        const tasks = await feishuService.getPendingTasks(limit);
+        const parsedTasks = tasks.map(task => feishuService.parseTaskRecord(task));
+
+        if (parsedTasks.length === 0) {
+          send({ type: "log", message: "没有找到待生成的任务" });
+          send({ type: "result", success: true, count: 0 });
+          controller.close();
+          return;
+        }
+
+        send({ type: "log", message: `找到 ${parsedTasks.length} 个任务，开始顺序处理...` });
+
+        let successCount = 0;
+        let failCount = 0;
+
+        for (let i = 0; i < parsedTasks.length; i++) {
+          const task = parsedTasks[i];
+          const recordId = task.recordId;
+
+          send({ type: "log", message: `[${i + 1}/${parsedTasks.length}] 处理任务: ${task.prompt.slice(0, 20)}...` });
+
+          try {
+            // Update status to "生成中"
+            await feishuService.updateTaskStatus(recordId, "生成中");
+
+            // Call generation API
+            let response, mediaUrl, watermarkFreeUrl, googleDriveUrl;
+            const generationType = task.generationType || "视频生成";
+
+            if (generationType === "图片生成") {
+              response = await callImageGenerationAPI(task);
+              mediaUrl = response.imageUrl;
+            } else {
+              // For video, we need to handle the stream and forward it to the client
+              response = await callVideoGenerationAPI(task, (chunk) => {
+                send({ type: "stream", content: chunk });
+              });
+              mediaUrl = response.videoUrl;
+              watermarkFreeUrl = response.watermarkFreeUrl;
+              googleDriveUrl = response.googleDriveUrl;
+            }
+
+            if (mediaUrl || watermarkFreeUrl || googleDriveUrl) {
+              const urlsFound = [];
+              if (watermarkFreeUrl) urlsFound.push(`无水印URL`);
+              if (googleDriveUrl) urlsFound.push(`Drive URL`);
+              if (mediaUrl) urlsFound.push(`视频URL`);
+
+              send({ type: "log", message: `  ✅ 生成成功 (${urlsFound.join(', ')})` });
+
+              if (generationType === "图片生成") {
+                await feishuService.updateTaskStatus(recordId, "成功", undefined, mediaUrl);
+              } else {
+                await feishuService.updateTaskStatus(
+                  recordId,
+                  "成功",
+                  mediaUrl,
+                  undefined,
+                  undefined,
+                  watermarkFreeUrl,
+                  googleDriveUrl
+                );
+              }
+              successCount++;
+            } else {
+              throw new Error("未返回有效URL");
+            }
+
+          } catch (err) {
+            console.error(`Task ${recordId} failed:`, err);
+            send({ type: "log", message: `  ❌ 任务失败: ${err.message}` });
+
+            try {
+              await feishuService.updateTaskStatus(recordId, "失败", undefined, undefined, err.message);
+            } catch (e) {
+              console.error("Failed to update failure status:", e);
+            }
+            failCount++;
+          }
+
+          // Add a small delay between tasks
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+
+        send({ type: "log", message: `批量处理完成. 成功: ${successCount}, 失败: ${failCount}` });
+        send({ type: "result", success: true, total: parsedTasks.length, successCount, failCount });
+
+      } catch (err) {
+        console.error("Batch processing error:", err);
+        send({ type: "error", message: err.message });
       } finally {
         controller.close();
       }
@@ -597,7 +742,7 @@ async function callVideoGenerationAPI(task: any, onProgress?: (chunk: string) =>
     // Process the streaming response to extract video URL
     const reader = response.body!.getReader();
     const decoder = new TextDecoder();
-    let buffer = '', videoUrl = null, allContent = '';
+    let buffer = '', videoUrl = null, watermarkFreeUrl = null, googleDriveUrl = null, allContent = '';
 
     console.log("Processing streaming response...");
 
@@ -635,34 +780,38 @@ async function callVideoGenerationAPI(task: any, onProgress?: (chunk: string) =>
 
             // URL extraction logic for video URLs
             if (content) {
-              // Improved regex to avoid capturing trailing parenthesis or brackets
-              const urlPatterns = [
-                /https?:\/\/[^\s<>"')\]]+/g,
-                /(?:https?:\/\/)?[^\s<>"')\]]*\.(?:mp4|webm|mov|avi)[^\s<>"')\]]*/gi,
-                /(?:https?:\/\/)?[^\s<>"')\]]*(?:video|media|cdn)[^\s<>"')\]]*\.(?:mp4|webm|mov|avi)[^\s<>"')\]]*/gi
-              ];
+              // Extract all URLs from content
+              const urlMatches = content.match(/https?:\/\/[^\s<>"'\)\ ]+/g);
 
-              for (const pattern of urlPatterns) {
-                const matches = content.match(pattern);
-                if (matches) {
-                  for (const match of matches) {
-                    let fullUrl = match;
-                    // Clean up any trailing punctuation that might have slipped through
-                    fullUrl = fullUrl.replace(/[)\]\.]$/, '');
+              if (urlMatches) {
+                for (const url of urlMatches) {
+                  let cleanUrl = url.replace(/[)\].,;]+$/, ''); // Clean trailing punctuation
 
-                    if (!fullUrl.startsWith('http')) {
-                      fullUrl = 'https://' + fullUrl;
-                    }
-                    if (fullUrl.match(/\.(mp4|webm|mov|avi)(\?|$)/i) ||
-                      fullUrl.includes('video') ||
-                      fullUrl.includes('media') ||
-                      fullUrl.includes('cdn')) {
-                      videoUrl = fullUrl;
-                      console.log("Found video URL:", videoUrl);
-                      break;
+                  // Identify watermark-free URLs (from oscdn2.dyysy.com or qushuiyin.me)
+                  if ((cleanUrl.includes('oscdn2.dyysy.com') || cleanUrl.includes('qushuiyin.me')) &&
+                    cleanUrl.match(/\.mp4(\?|$)/i)) {
+                    if (!watermarkFreeUrl) {
+                      watermarkFreeUrl = cleanUrl;
+                      console.log("Found watermark-free URL:", watermarkFreeUrl);
                     }
                   }
-                  if (videoUrl) break;
+                  // Identify Google Drive URLs
+                  else if (cleanUrl.includes('drive.google.com')) {
+                    if (!googleDriveUrl) {
+                      googleDriveUrl = cleanUrl;
+                      console.log("Found Google Drive URL:", googleDriveUrl);
+                    }
+                  }
+                  // Regular video URLs
+                  else if (cleanUrl.match(/\.(mp4|webm|mov|avi)(\?|$)/i) ||
+                    cleanUrl.includes('video') ||
+                    cleanUrl.includes('media') ||
+                    cleanUrl.includes('cdn')) {
+                    if (!videoUrl) {
+                      videoUrl = cleanUrl;
+                      console.log("Found video URL:", videoUrl);
+                    }
+                  }
                 }
               }
             }
@@ -673,13 +822,27 @@ async function callVideoGenerationAPI(task: any, onProgress?: (chunk: string) =>
             const urls = line.match(/https?:\/\/[^\s<>"']+/g);
             if (urls) {
               for (const url of urls) {
-                if (url.match(/\.(mp4|webm|mov|avi|m3u8|ts)(\?|$)/i) ||
-                  url.includes('video') ||
-                  url.includes('media') ||
-                  url.includes('cdn')) {
-                  videoUrl = url;
-                  console.log("Found video URL in plain text:", videoUrl);
-                  break;
+                let cleanUrl = url.replace(/[)\].,;]+$/, '');
+
+                if ((cleanUrl.includes('oscdn2.dyysy.com') || cleanUrl.includes('qushuiyin.me')) &&
+                  cleanUrl.match(/\.mp4(\?|$)/i)) {
+                  if (!watermarkFreeUrl) {
+                    watermarkFreeUrl = cleanUrl;
+                    console.log("Found watermark-free URL in plain text:", watermarkFreeUrl);
+                  }
+                } else if (cleanUrl.includes('drive.google.com')) {
+                  if (!googleDriveUrl) {
+                    googleDriveUrl = cleanUrl;
+                    console.log("Found Google Drive URL in plain text:", googleDriveUrl);
+                  }
+                } else if (cleanUrl.match(/\.(mp4|webm|mov|avi|m3u8|ts)(\?|$)/i) ||
+                  cleanUrl.includes('video') ||
+                  cleanUrl.includes('media') ||
+                  cleanUrl.includes('cdn')) {
+                  if (!videoUrl) {
+                    videoUrl = cleanUrl;
+                    console.log("Found video URL in plain text:", videoUrl);
+                  }
                 }
               }
             }
@@ -691,26 +854,39 @@ async function callVideoGenerationAPI(task: any, onProgress?: (chunk: string) =>
           const urls = line.match(/https?:\/\/[^\s<>"']+/g);
           if (urls) {
             for (const url of urls) {
-              if (url.match(/\.(mp4|webm|mov|avi|m3u8|ts)(\?|$)/i) ||
-                url.includes('video') ||
-                url.includes('media') ||
-                url.includes('cdn')) {
-                videoUrl = url;
-                console.log("Found video URL in line:", videoUrl);
-                break;
+              let cleanUrl = url.replace(/[)\].,;]+$/, '');
+
+              if ((cleanUrl.includes('oscdn2.dyysy.com') || cleanUrl.includes('qushuiyin.me')) &&
+                cleanUrl.match(/\.mp4(\?|$)/i)) {
+                if (!watermarkFreeUrl) {
+                  watermarkFreeUrl = cleanUrl;
+                  console.log("Found watermark-free URL in line:", watermarkFreeUrl);
+                }
+              } else if (cleanUrl.includes('drive.google.com')) {
+                if (!googleDriveUrl) {
+                  googleDriveUrl = cleanUrl;
+                  console.log("Found Google Drive URL in line:", googleDriveUrl);
+                }
+              } else if (cleanUrl.match(/\.(mp4|webm|mov|avi|m3u8|ts)(\?|$)/i) ||
+                cleanUrl.includes('video') ||
+                cleanUrl.includes('media') ||
+                cleanUrl.includes('cdn')) {
+                if (!videoUrl) {
+                  videoUrl = cleanUrl;
+                  console.log("Found video URL in line:", videoUrl);
+                }
               }
             }
-            // console.error("Parse error:", { data: data.slice(0, 100) });
 
           }
         }
       }
 
-      if (videoUrl) break;
+      // Continue processing to collect all URL types
     }
 
     // Final check on all collected content
-    if (!videoUrl) {
+    if (!videoUrl && !watermarkFreeUrl && !googleDriveUrl) {
       console.error("No video URL found. Response Content length:", allContent.length);
       // Only log last 500 chars to avoid log overflow
       console.error("Content tail:", allContent.slice(-500));
@@ -718,18 +894,25 @@ async function callVideoGenerationAPI(task: any, onProgress?: (chunk: string) =>
       // Try to find any video URL in the entire content
       const allUrls = allContent.match(/https?:\/\/[^\s<>"']*\.(?:mp4|webm|mov|avi|m3u8|ts)[^\s<>"']*/gi);
       if (allUrls && allUrls.length > 0) {
-        videoUrl = allUrls[0];
-        console.log("Found video URL with final search:", videoUrl);
+        // Prioritize watermark-free URLs
+        const wmFree = allUrls.find(u => u.includes('oscdn2.dyysy.com') || u.includes('qushuiyin.me'));
+        if (wmFree) {
+          watermarkFreeUrl = wmFree;
+          console.log("Found watermark-free URL with final search:", watermarkFreeUrl);
+        } else {
+          videoUrl = allUrls[0];
+          console.log("Found video URL with final search:", videoUrl);
+        }
       }
     }
 
-    if (!videoUrl) {
+    if (!videoUrl && !watermarkFreeUrl && !googleDriveUrl) {
       throw new Error(`API响应中未找到视频URL。`);
     }
 
-    console.log("Final video URL:", videoUrl);
+    console.log("Final URLs:", { videoUrl, watermarkFreeUrl, googleDriveUrl });
 
-    return { videoUrl };
+    return { videoUrl, watermarkFreeUrl, googleDriveUrl };
 
   } catch (error) {
     console.error("Video generation API error:", error);

@@ -225,6 +225,10 @@ async function loadFeishuTasks() {
                             ${t.videoUrl ? `<a href="${t.videoUrl}" target="_blank" style="color:#6366f1; font-size:12px; text-decoration:underline; word-break:break-all;">${t.videoUrl}</a>` : '<span style="color:#475569; font-size:12px;">暂无</span>'}
                         </div>
                         <div style="display:flex; align-items:center; gap:10px;">
+                            <span style="color:#94a3b8; font-size:11px; min-width:70px;">无水印URL:</span>
+                            ${t.watermarkFreeUrl ? `<a href="${t.watermarkFreeUrl}" target="_blank" style="color:#6366f1; font-size:12px; text-decoration:underline; word-break:break-all;">${t.watermarkFreeUrl}</a>` : '<span style="color:#475569; font-size:12px;">暂无</span>'}
+                        </div>
+                        <div style="display:flex; align-items:center; gap:10px;">
                             <span style="color:#94a3b8; font-size:11px; min-width:70px;">图片URL:</span>
                             ${t.imageUrl ? `<a href="${t.imageUrl}" target="_blank" style="color:#6366f1; font-size:12px; text-decoration:underline; word-break:break-all;">${t.imageUrl}</a>` : '<span style="color:#475569; font-size:12px;">暂无</span>'}
                         </div>
@@ -255,6 +259,7 @@ async function loadFeishuTasks() {
 
                 let mediaLinks = '';
                 if (t.videoUrl) mediaLinks += `<div style="margin-top:4px;"><span style="color:#94a3b8;">视频URL:</span> <a href="${t.videoUrl}" target="_blank" style="color:#10b981; text-decoration:underline; font-size:11px; word-break:break-all;">${t.videoUrl}</a></div>`;
+                if (t.watermarkFreeUrl) mediaLinks += `<div style="margin-top:4px;"><span style="color:#94a3b8;">无水印URL:</span> <a href="${t.watermarkFreeUrl}" target="_blank" style="color:#10b981; text-decoration:underline; font-size:11px; word-break:break-all;">${t.watermarkFreeUrl}</a></div>`;
                 if (t.imageUrl) mediaLinks += `<div style="margin-top:4px;"><span style="color:#94a3b8;">图片URL:</span> <a href="${t.imageUrl}" target="_blank" style="color:#10b981; text-decoration:underline; font-size:11px; word-break:break-all;">${t.imageUrl}</a></div>`;
 
                 html += `<div class="history-item" style="margin-bottom:12px; flex-direction:column; align-items:stretch; padding:12px; border:1px solid #10b981; background:rgba(16,185,129,0.05);">
@@ -396,23 +401,88 @@ async function genTask(id) {
 async function batchGenerateVideos() {
     const tasks = feishuTasks.filter(t => t.prompt);
     if (!tasks.length) { updateFeishuStatus('没有待生成任务', 'warning'); return; }
-    if (!confirm(`批量生成 ${tasks.length} 个视频?`)) return;
+    if (!confirm(`批量生成 ${tasks.length} 个视频? (将使用后端顺序处理模式)`)) return;
 
-    const btn = document.getElementById('batchGenerateBtn');
-    btn.disabled = true; btn.innerHTML = '生成中...';
-
-    let ok = 0, fail = 0;
-    for (let i = 0; i < tasks.length; i++) {
-        updateFeishuStatus(`[${i + 1}/${tasks.length}] 处理中...`, 'info');
-        const success = await genTask(tasks[i].recordId);
-        if (success) { ok++; } else { fail++; }
-
-        if (i < tasks.length - 1) await new Promise(r => setTimeout(r, 2000));
+    if (isProcessing) {
+        updateFeishuStatus('⚠️ 正在处理任务，请稍候...', 'warning');
+        return;
     }
 
-    btn.disabled = false; btn.innerHTML = '🎬 批量生成全部';
-    updateFeishuStatus(`🎉 完成! 成功${ok}, 失败${fail}`, ok > 0 ? 'success' : 'error');
-    loadFeishuTasks();
+    isProcessing = true;
+    const btn = document.getElementById('batchGenerateBtn');
+    btn.disabled = true; btn.innerHTML = '批量生成中...';
+
+    const streamEl = getFeishuStreamEl();
+    const contentEl = document.getElementById('feishuStreamContent');
+    streamEl.style.display = 'flex';
+
+    // 添加批量任务分割线
+    const separator = document.createElement('div');
+    separator.style.cssText = 'border-top:2px solid #6366f1;margin:20px 0;padding-top:10px;color:#6366f1;font-weight:bold;font-size:16px;';
+    separator.innerHTML = `🚀 开始批量生成任务 (${tasks.length}个)`;
+    contentEl.appendChild(separator);
+
+    updateFeishuStatus(`开始批量生成 ${tasks.length} 个任务...`, 'info');
+
+    try {
+        const response = await fetch('/api/feishu/generate/batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ limit: tasks.length })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(errorText || response.statusText);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        // 创建一个用于显示流式内容的容器
+        const streamTextContainer = document.createElement('span');
+        streamTextContainer.style.color = '#e2e8f0';
+        contentEl.appendChild(streamTextContainer);
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    try {
+                        const data = JSON.parse(line.slice(6));
+                        if (data.type === 'log') {
+                            updateFeishuStatus(data.message, 'info');
+                        } else if (data.type === 'stream') {
+                            streamTextContainer.textContent += data.content;
+                            contentEl.scrollTop = contentEl.scrollHeight;
+                        } else if (data.type === 'result') {
+                            if (data.success) {
+                                updateFeishuStatus(`✅ 批量处理完成! 成功: ${data.successCount}, 失败: ${data.failCount}`, 'success');
+                            }
+                        } else if (data.type === 'error') {
+                            throw new Error(data.message);
+                        }
+                    } catch (e) {
+                        console.error('SSE Parse Error:', e);
+                    }
+                }
+            }
+        }
+
+    } catch (e) {
+        updateFeishuStatus('❌ 批量生成失败: ' + e.message, 'error');
+    } finally {
+        isProcessing = false;
+        btn.disabled = false; btn.innerHTML = '🎬 批量生成全部';
+        loadFeishuTasks();
+    }
 }
 
 window.loadFeishuTasks = loadFeishuTasks;

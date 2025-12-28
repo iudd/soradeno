@@ -210,7 +210,9 @@ export class FeishuService {
         status: string,
         videoUrl?: string,
         imageUrl?: string,
-        error?: string
+        error?: string,
+        watermarkFreeUrl?: string,
+        googleDriveUrl?: string
     ): Promise<void> {
         const token = await this.getTenantAccessToken();
 
@@ -220,12 +222,27 @@ export class FeishuService {
         };
 
         if (status === "成功") {
-            if (videoUrl) {
+            // 优先使用 Google Drive URL 填充视频URL字段
+            if (googleDriveUrl) {
+                fields["视频URL"] = {
+                    link: googleDriveUrl,
+                    text: "查看视频",
+                };
+            } else if (videoUrl) {
                 fields["视频URL"] = {
                     link: videoUrl,
                     text: "查看视频",
                 };
             }
+
+            // 如果有无水印URL，填充到专门的字段
+            if (watermarkFreeUrl) {
+                fields["无水印视频URL"] = {
+                    link: watermarkFreeUrl,
+                    text: "无水印视频",
+                };
+            }
+
             if (imageUrl) {
                 fields["图片URL"] = {
                     link: imageUrl,
@@ -240,7 +257,7 @@ export class FeishuService {
             fields["错误信息"] = error;
         }
 
-        console.log("[Feishu] 更新任务状态:", { recordId, status });
+        console.log("[Feishu] 更新任务状态:", { recordId, status, fields });
 
         const response = await fetch(
             `https://open.feishu.cn/open-apis/bitable/v1/apps/${this.appToken}/tables/${this.tableId}/records/${recordId}`,
@@ -295,6 +312,7 @@ export class FeishuService {
         isGenerated: boolean;
         createdTime?: string;
         videoUrl?: string;
+        watermarkFreeUrl?: string;
         imageUrl?: string;
         error?: string;
     } {
@@ -329,11 +347,19 @@ export class FeishuService {
 
         // 尝试获取视频URL
         let videoUrl = undefined;
+        let watermarkFreeUrl = undefined;
         if (fields["视频URL"]) {
             if (typeof fields["视频URL"] === "string") {
                 videoUrl = fields["视频URL"];
             } else if (fields["视频URL"].link) {
                 videoUrl = fields["视频URL"].link;
+            }
+        }
+        if (fields["无水印视频URL"]) {
+            if (typeof fields["无水印视频URL"] === "string") {
+                watermarkFreeUrl = fields["无水印视频URL"];
+            } else if (fields["无水印视频URL"].link) {
+                watermarkFreeUrl = fields["无水印视频URL"].link;
             }
         }
 
@@ -399,6 +425,7 @@ export class FeishuService {
             isGenerated: fields["是否已生成"] || false,
             createdTime: fields["生成时间"] ? new Date(fields["生成时间"]).toLocaleString("zh-CN") : undefined,
             videoUrl: videoUrl,
+            watermarkFreeUrl: watermarkFreeUrl,
             imageUrl: imageUrl,
             error: fields["错误信息"] || "",
         };
